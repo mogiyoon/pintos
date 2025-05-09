@@ -13,12 +13,20 @@
 *.hex
 *.dis
 *.dump
+*.dsk
+
+# Makefile 산출물
+Makefile
+*.errors
+*.output
+*.result
+*.s
 
 # 빌드 디렉터리
-/build/
-/bin/
-/obj/
-/output/
+**/build/
+**/bin/
+**/obj/
+**/output/
 
 # core dump
 core
