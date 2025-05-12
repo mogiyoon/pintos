@@ -107,6 +107,11 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+
+	/* Project 1 modifications */
+	struct list_elem sleep_elem;
+	int64_t wakeup_time;
+
 };
 
 /* If false (default), use round-robin scheduler.

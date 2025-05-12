@@ -105,7 +105,7 @@ thread_init (void) {
 	};
 	lgdt (&gdt_ds);
 
-	/* Init the globla thread context */
+	/* Init the global thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
@@ -198,11 +198,11 @@ thread_create (const char *name, int priority,
 	t->tf.rip = (uintptr_t) kernel_thread;
 	t->tf.R.rdi = (uint64_t) function;
 	t->tf.R.rsi = (uint64_t) aux;
-	t->tf.ds = SEL_KDSEG;
+	t->tf.ds = SEL_KDSEG;	// data segment
 	t->tf.es = SEL_KDSEG;
 	t->tf.ss = SEL_KDSEG;
-	t->tf.cs = SEL_KCSEG;
-	t->tf.eflags = FLAG_IF;
+	t->tf.cs = SEL_KCSEG;   // code segment
+	t->tf.eflags = FLAG_IF; // Turn on Interrupt enable bit
 
 	/* Add to run queue. */
 	thread_unblock (t);
@@ -299,9 +299,9 @@ thread_yield (void) {
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
 
-	ASSERT (!intr_context ());
+	ASSERT (!intr_context ());		// Do Not yield in interrupt context
 
-	old_level = intr_disable ();
+	old_level = intr_disable ();	// Disable interrupt to protect critical section
 	if (curr != idle_thread)
 		list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
@@ -475,12 +475,16 @@ thread_launch (struct thread *th) {
 	 * until switching is done. */
 	__asm __volatile (
 			/* Store registers that will be used. */
+			/* Save current thread's general-purpopse registers*/
 			"push %%rax\n"
 			"push %%rbx\n"
 			"push %%rcx\n"
 			/* Fetch input once */
+			/* Save input pointers */
 			"movq %0, %%rax\n"
 			"movq %1, %%rcx\n"
+			/* Save registers to current thread's tf (tf_cur)*/
+			// save r15 reg value (8byte) to addr rax points to (offset 0)
 			"movq %%r15, 0(%%rax)\n"
 			"movq %%r14, 8(%%rax)\n"
 			"movq %%r13, 16(%%rax)\n"
@@ -493,15 +497,20 @@ thread_launch (struct thread *th) {
 			"movq %%rdi, 72(%%rax)\n"
 			"movq %%rbp, 80(%%rax)\n"
 			"movq %%rdx, 88(%%rax)\n"
+
 			"pop %%rbx\n"              // Saved rcx
 			"movq %%rbx, 96(%%rax)\n"
 			"pop %%rbx\n"              // Saved rbx
 			"movq %%rbx, 104(%%rax)\n"
 			"pop %%rbx\n"              // Saved rax
 			"movq %%rbx, 112(%%rax)\n"
+
+			/* Save segment registers */
 			"addq $120, %%rax\n"
 			"movw %%es, (%%rax)\n"
 			"movw %%ds, 8(%%rax)\n"
+			
+			/* Save instruction pointer and flags */
 			"addq $32, %%rax\n"
 			"call __next\n"         // read the current rip.
 			"__next:\n"
@@ -514,6 +523,8 @@ thread_launch (struct thread *th) {
 			"mov %%rbx, 16(%%rax)\n" // eflags
 			"mov %%rsp, 24(%%rax)\n" // rsp
 			"movw %%ss, 32(%%rax)\n"
+
+			/* Actually switch to new thread context */
 			"mov %%rcx, %%rdi\n"
 			"call do_iret\n"
 			"out_iret:\n"
