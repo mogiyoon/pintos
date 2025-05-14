@@ -24,6 +24,8 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
+static bool pri_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -62,6 +64,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static void thread_preempt(void);
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -104,7 +107,6 @@ thread_init (void) {
 		.address = (uint64_t) gdt
 	};
 	lgdt (&gdt_ds);
-
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
@@ -206,6 +208,8 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	
+	thread_preempt();
 
 	return tid;
 }
@@ -232,6 +236,12 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+bool
+pri_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	const struct thread *t1 = list_entry(a, struct thread, elem);
+	const struct thread *t2 = list_entry(b, struct thread, elem);
+	return t1->priority > t2->priority;
+}
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -240,7 +250,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	//list_push_back (&ready_list, &t->elem);
+	list_insert_ordered (&ready_list, &t->elem ,pri_less, NULL); // 우선순위 내림차순으로 넣어주기
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -303,7 +314,8 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		//list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered (&ready_list, &curr->elem ,pri_less, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -311,7 +323,9 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
+	
 	thread_current ()->priority = new_priority;
+	thread_yield(); // 우선순위 변경 후 더 높은 우선순위 스레드가 있다면 양보
 }
 
 /* Returns the current thread's priority. */
@@ -587,4 +601,13 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+static void
+thread_preempt(void){
+	if(!list_empty(&ready_list)){
+		struct thread *cur = list_entry(list_front(&ready_list), struct thread, elem);
+		if(cur -> priority > thread_current()->priority)
+		thread_yield();
+	}
 }
