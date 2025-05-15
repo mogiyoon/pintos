@@ -62,6 +62,8 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static struct list sleep_list;
+static int64_t next_tick_to_awake;
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -109,6 +111,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	list_init (&sleep_list);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -206,6 +209,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	test_max_priority ();
 
 	return tid;
 }
@@ -240,9 +244,80 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back (&ready_list, &t->elem);
+	list_insert_ordered (&ready_list, &t->elem,
+                       thread_compare_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
+}
+
+void 
+update_next_tick_to_awake(int64_t ticks){
+	next_tick_to_awake = (next_tick_to_awake > ticks) ? ticks : next_tick_to_awake;
+}             	
+
+int64_t
+get_next_tick_to_awake(void){
+	return next_tick_to_awake;
+}
+
+void 
+thread_sleep(int64_t ticks){
+	struct thread *cur;
+
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	cur = thread_current();
+	ASSERT(cur != idle_thread);
+
+	update_next_tick_to_awake(cur-> wakeup_tick = ticks);
+
+		list_push_back(&sleep_list, &cur->elem);
+
+	thread_block();
+
+	intr_set_level(old_level);	
+}
+
+void thread_awake(int64_t wakeup_tick){
+	next_tick_to_awake = INT64_MAX;
+	struct list_elem *e;
+	e = list_begin(&sleep_list);
+	while(e != list_end(&sleep_list)){
+		struct thread *t = list_entry(e, struct thread, elem);
+
+		if(wakeup_tick >= t->wakeup_tick){
+			e = list_remove(&t->elem);
+			thread_unblock(t);
+		}else{
+			e = list_next(e);
+			update_next_tick_to_awake(t->wakeup_tick);
+		}
+		
+	}
+
+}
+
+
+/* 비교 함수: 우선순위 큰 순서로 정렬 */
+static bool
+thread_compare_priority (const struct list_elem *a,
+                         const struct list_elem *b,
+                         void *aux UNUSED)
+{
+  return list_entry (a, struct thread, elem)->priority
+       > list_entry (b, struct thread, elem)->priority;
+}
+
+static void
+test_max_priority (void)
+{
+  if (!list_empty (&ready_list)
+      && thread_current ()->priority
+         < list_entry (list_front (&ready_list),
+                       struct thread, elem)->priority)
+    thread_yield ();
 }
 
 /* Returns the name of the running thread. */
@@ -303,7 +378,9 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		// list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered (&ready_list, &curr->elem,
+                         thread_compare_priority, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -312,6 +389,7 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	test_max_priority ();
 }
 
 /* Returns the current thread's priority. */
