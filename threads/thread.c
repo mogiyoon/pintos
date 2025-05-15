@@ -28,6 +28,12 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* New - List of processes in THREAD_BLOCK state. */
+static struct list block_list; //ADD
+
+/* New - List of Sleep thread */
+static struct list sleep_list; //ADD
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -62,6 +68,8 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+
+bool priority_comparer(struct list_elem* a, struct list_elem* b, void *aux); //ADD
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -109,6 +117,8 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	list_init (&block_list); //ADD
+	list_init (&sleep_list); //ADD
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -224,6 +234,43 @@ thread_block (void) {
 	schedule ();
 }
 
+//ADD
+void
+thread_sleep (int64_t ticks) {
+	if (ticks > 0) {
+		int64_t start = timer_ticks();
+		enum intr_level old_level = intr_disable ();
+		ASSERT (!intr_context ());
+		ASSERT (intr_get_level () == INTR_OFF);
+		struct thread* now = thread_current();
+		now->sleep_time = start + ticks;
+		list_insert_ordered(&sleep_list, &now->elem, priority_comparer, NULL);
+		thread_block();
+		intr_set_level(old_level);
+	}
+}
+//ADD
+void
+thread_wake (void) {
+	int64_t now = timer_ticks();
+	if (!list_empty(&sleep_list)) {
+		enum intr_level old_level = intr_disable ();
+		struct thread* wake_head = list_entry(list_front(&sleep_list), struct thread, elem);
+		while (wake_head->sleep_time <= now) {
+			ASSERT (wake_head->status == THREAD_BLOCKED);
+			list_pop_front (&sleep_list);
+			thread_unblock(wake_head);
+			if (list_empty(&sleep_list)) {
+				break;
+			} else {
+				wake_head = list_entry(list_front(&sleep_list), struct thread, elem);
+			}
+		}
+		intr_set_level (old_level);
+	}
+}
+//ADD
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -240,8 +287,13 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back(&ready_list, &t->elem);
+	//ADD
+	list_insert_ordered(&ready_list, &t->elem, priority_comparer, NULL);
 	t->status = THREAD_READY;
+	if (thread_current() != idle_thread && thread_get_priority() < t->priority) {
+		thread_yield();
+	}
 	intr_set_level (old_level);
 }
 
@@ -303,15 +355,38 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, priority_comparer, NULL);
+		// list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
+
+//ADD
+void
+donate_priority (struct thread* receiver) {
+	enum intr_level old_level = intr_disable();
+
+	struct thread* cur = thread_current();
+	if (receiver->priority < cur->priority)	{
+		receiver->priority = cur->priority;
+	}
+
+	list_sort(&ready_list, priority_comparer, NULL);
+	intr_set_level(old_level);
+};
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	thread_current ()->original_priority = new_priority;
+
+	//ADD
+	if (!list_empty(&ready_list)) {
+		if (list_entry(list_front(&ready_list), struct thread, elem)->priority > new_priority) {
+			thread_yield();
+		}
+	}
 }
 
 /* Returns the current thread's priority. */
@@ -405,9 +480,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	memset (t, 0, sizeof *t);
 	t->status = THREAD_BLOCKED;
+	t->sleep_time = 0;
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->original_priority = priority;
 	t->magic = THREAD_MAGIC;
 }
 
@@ -587,4 +664,23 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+//ADD
+bool
+priority_comparer(struct list_elem* a, struct list_elem* b, void *aux) {
+	struct thread* thread_a = list_entry_self(a, struct thread, elem);
+	struct thread* thread_b = list_entry_self(b, struct thread, elem);
+
+	if (thread_a->sleep_time < thread_b->sleep_time) {
+		return true;
+	} 
+	else if (thread_a->sleep_time == thread_b->sleep_time) 
+	{
+		if (thread_a->priority > thread_b->priority) {
+			return true;
+		}
+	}
+
+	return false;
 }

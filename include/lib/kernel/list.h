@@ -104,6 +104,10 @@ struct list {
 	((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
 		- offsetof (STRUCT, MEMBER.next)))
 
+#define list_entry_self(LIST_ELEM, STRUCT, MEMBER)           \
+	((STRUCT *) ((uint8_t *) (LIST_ELEM)     \
+		- offsetof (STRUCT, MEMBER))) // ADD
+
 void list_init (struct list *);
 
 /* List traversal. */
