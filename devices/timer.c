@@ -7,6 +7,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "lib/kernel/list.h"
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -28,6 +29,9 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
+static bool cmp_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+static struct list sleep_list;
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -43,6 +47,7 @@ timer_init (void) {
 	outb (0x40, count >> 8);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+	list_init(&sleep_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -88,13 +93,31 @@ timer_elapsed (int64_t then) {
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
+
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+    int64_t start = timer_ticks();
+    int64_t wakeup = start + ticks;
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+    ASSERT(intr_get_level() == INTR_ON);
+
+    enum intr_level old_level = intr_disable();
+
+    struct thread *cur = thread_current();
+    cur->wakeup_tick = wakeup;
+	
+    list_insert_ordered(&sleep_list, &cur->elem, cmp_wakeup_time, NULL);
+    thread_block();
+    intr_set_level (old_level);
+}
+
+/* Project 1 - alarm */
+bool
+cmp_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *t_a = list_entry(a, struct thread, elem);
+	struct thread *t_b = list_entry(b, struct thread, elem);
+
+	return t_a->wakeup_tick < t_b->wakeup_tick;
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -120,11 +143,22 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
+/* Project 1 - alarm */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	enum intr_level old_level = intr_disable();
+
+	while(!list_empty(&sleep_list)){
+		struct thread *t = list_entry(list_front(&sleep_list), struct thread, elem);
+		if(t->wakeup_tick > ticks)
+			break;
+		list_pop_front(&sleep_list);
+		thread_unblock(t);
+	}
+	intr_set_level(old_level);
 	thread_tick ();
 }
 
