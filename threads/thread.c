@@ -63,6 +63,8 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -207,6 +209,10 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	if((t->priority > thread_current()->priority) && thread_current != idle_thread){
+		thread_yield();
+	}
+
 	return tid;
 }
 
@@ -240,8 +246,14 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
+
+	/* Moved to thread_create
+	if((t->priority > thread_current()->priority) && thread_current != idle_thread){
+		thread_yield();
+	}*/
 	intr_set_level (old_level);
 }
 
@@ -303,7 +315,8 @@ thread_yield (void) {
 
 	old_level = intr_disable ();	// Disable interrupt to protect critical section
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		// list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -311,7 +324,20 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	// thread_current ()->priority = new_priority;
+	struct thread *curr = thread_current();
+	enum intr_level old_level;
+
+	curr->priority = new_priority;
+	old_level = intr_disable();
+
+	if(!list_empty(&ready_list)){
+		struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
+		if(curr->priority < front->priority){
+			thread_yield();
+		}
+	}
+	intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -598,4 +624,14 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+/* Project 1 - priority */
+
+bool
+cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+	struct thread *t_a = list_entry(a, struct thread, elem);
+	struct thread *t_b = list_entry(b, struct thread, elem);
+
+	return t_a->priority > t_b->priority;
 }

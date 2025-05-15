@@ -29,15 +29,9 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
+static bool cmp_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
-/* Sleep Queue Define :
- * - 슬립 큐는 각 스레드가 언제 깨워져야 하는지에 대한 정보를 저장한다
- * - 각 스레드는 "깨울 시간"과 함께 슬립 큐에 추가된다 */
-struct sleep_queue {
-	int64_t wakeup_time;
-	struct thread *t;
-	struct list_elem elem;
-};
+static struct list sleep_list;
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -98,46 +92,32 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* 슬립 큐의 항목 비교 :
- * - 두 sleep_queue 항목을 비교하여 wakeup_time 값을 기준으로 오름차순 정렬되게 한다.
- * - a의 wakeup_time이 b의 wakeup_time 보다 작으면 true 반환하여 a가 먼저 온다.
- * - 그렇지 않으면 false를 반환하여 b가 먼저 오도록 한다. */
-static bool
-cmp_wakeup_time (const struct list_elem *a, const struct list_elem *b, void *aux){
-	const struct sleep_queue *t_a = list_entry(a, struct sleep_queue, elem);
-	const struct sleep_queue *t_b = list_entry(b, struct sleep_queue, elem);
-	
-	return t_a->wakeup_time < t_b->wakeup_time;
-}
-
 /* Suspends execution for approximately TICKS timer ticks. */
 
-/* 슬립 큐 관리 :
- * - timer_sleep 함수에서 현재 스레드가 깨워질 시간 정보를 슬립 큐에 추가한다
- * - 각 스레드는 깨워질 시간을 기준으로 큐에 삽입(list_insert_ordered)
- * - 함수는 리스트를 순차적으로 확인하고, cmp_wakeup_time으로 a, b 비교 한다 */
-
-/* 스레드 블로킹 (Blocking) :
- * - 스레드가 슬립 큐에 추가되면, 해당 스레드는 블록 상태로 전환 (thread_block())
- * - 스레드는 깨어나기 전까지 스케줄러에서 제외된다.
- * - 스레드가 슬립 큐에 추가되기 전에 인터럽트 해제 후, 블록 상태 전환 시 다시 복원 */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks();
-	struct thread *t = list_entry(list_front(&sleep_list), struct thread, sleep_elem);
-	struct thread *current = thread_current();
+    int64_t start = timer_ticks();
+    int64_t wakeup = start + ticks;
+
+    ASSERT(intr_get_level() == INTR_ON);
+
+    enum intr_level old_level = intr_disable();
+
+    struct thread *cur = thread_current();
+    cur->wakeup_tick = wakeup;
 	
-	ASSERT(intr_get_level() == INTR_ON);
-	enum intr_level old_level = intr_disable();
-	current->wakeup_time = start + ticks;
-	
-	struct sleep_queue st;
-	st.wakeup_time = current->wakeup_time;
-	st.t = current;
-	
-	list_insert_ordered(&sleep_list, &st.elem, cmp_wakeup_time, NULL);
-	thread_block();
-	intr_set_level (old_level);
+    list_insert_ordered(&sleep_list, &cur->elem, cmp_wakeup_time, NULL);
+    thread_block();
+    intr_set_level (old_level);
+}
+
+/* Project 1 - alarm */
+bool
+cmp_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *t_a = list_entry(a, struct thread, elem);
+	struct thread *t_b = list_entry(b, struct thread, elem);
+
+	return t_a->wakeup_tick < t_b->wakeup_tick;
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -164,31 +144,22 @@ timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-static struct list sleep_list;
-
 /* Timer interrupt handler. */
-/* 타이머 인터럽트 처리 :
- * - 타이머 인터럽트가 발생하면 현재 시간을 확인하고 슬립 큐를 순차적으로 확인한다
- * - 각 스레드의 깨울 시간을 확인하여 시간이 지난 스레드를 찾는다
- * - 깨울 시간이 지난 스레드는 슬립 큐에서 제거하고 실행 대기 상태로 만든다. */
-
-/* 깨운 스레드 스케줄링 : 
- * - 타이머 인터럽트 후, 깨워야 할 스레드를 찾아 thread_unblock을 호출하여 실행 대기 상태로 만든다
- * - 이후 스케줄러는 실행할 스레드를 선택하고 스레드를 전환한다.
- * - 기존의 thread_yield 방식을 대신하여 block/unblock 방식으로 스레드를 재우고 깨운다. */
+/* Project 1 - alarm */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	thread_tick();
-	
+	enum intr_level old_level = intr_disable();
+
 	while(!list_empty(&sleep_list)){
-		const struct sleep_queue *st = list_entry(list_front(&sleep_list), struct sleep_queue, elem);
-		if(st->wakeup_time > ticks){
+		struct thread *t = list_entry(list_front(&sleep_list), struct thread, elem);
+		if(t->wakeup_tick > ticks)
 			break;
-		}
 		list_pop_front(&sleep_list);
-		thread_unblock(st->t);
+		thread_unblock(t);
 	}
+	intr_set_level(old_level);
+	thread_tick ();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

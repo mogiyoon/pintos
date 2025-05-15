@@ -96,7 +96,7 @@ struct thread {
 	struct list_elem elem;              /* List element. */
 
 #ifdef USERPROG
-	/* Owned by userprog/process.c. */
+	/* Owned by  userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
 #endif
 #ifdef VM
@@ -108,10 +108,16 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 
-	/* Project 1 modifications */
+	/* Project 1 : alarm */
 	struct list_elem sleep_elem;
-	int64_t wakeup_time;
+	int64_t wakeup_tick;
 
+	/* Project 1 : priority-donate*/
+	int original_priority;
+	struct lock *wait_lock;
+	struct list donations;
+	struct list_elem donation_elem;
+	
 };
 
 /* If false (default), use round-robin scheduler.
@@ -147,5 +153,6 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+//bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */
