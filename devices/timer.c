@@ -49,6 +49,7 @@ timer_init (void) {
 void
 timer_calibrate (void) {
 	unsigned high_bit, test_bit;
+
 	ASSERT (intr_get_level () == INTR_ON);
 	printf ("Calibrating timer...  ");
 
@@ -89,12 +90,15 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
+	int64_t start = timer_ticks ();
+
 	ASSERT (intr_get_level () == INTR_ON);
-	
-	thread_sleep(ticks);
 	// while (timer_elapsed (start) < ticks)
 	// 	thread_yield ();
+
+	thread_sleep(start + ticks);
 }
+
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -124,9 +128,11 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	// msg("tick: %d   tid: %d", ticks, thread_current ()->tid);
-	thread_wake();
-	thread_tick ();
+	thread_tick ();	
+
+	if (get_next_tick_to_awake() <= ticks){
+		thread_awake(ticks);
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -157,7 +163,7 @@ too_many_loops (unsigned loops) {
 static void NO_INLINE
 busy_wait (int64_t loops) {
 	while (loops-- > 0)
-		barrier ();
+		barrier (); // 컴파일러가 없애 버리지 못하게 하기
 }
 
 /* Sleep for approximately NUM/DENOM seconds. */

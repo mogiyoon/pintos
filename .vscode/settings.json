@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "stdint.h": "c",
+        "synch.h": "c",
+        "*.inc": "c",
+        "list.h": "c"
+    }
+}
