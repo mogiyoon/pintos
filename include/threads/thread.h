@@ -92,9 +92,13 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	int64_t wake_tick; 					/* 스레드가 언제 깨어나야 하는지 저장하기위한 변수*/
-
-	/* Shared between thread.c and synch.c. */
+	int original_priority;
+	uint64_t arrival_sequence_no;      // 도착정보 fifo
+	
+/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -143,5 +147,6 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+void donate_priority(struct thread* receiver);
 
 #endif /* threads/thread.h */
