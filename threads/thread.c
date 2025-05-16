@@ -69,8 +69,6 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
-bool priority_comparer(struct list_elem* a, struct list_elem* b, void *aux); //ADD
-
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -354,8 +352,9 @@ thread_yield (void) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
-	if (curr != idle_thread)
+	if (curr != idle_thread) {
 		list_insert_ordered(&ready_list, &curr->elem, priority_comparer, NULL);
+	}
 		// list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
@@ -363,17 +362,40 @@ thread_yield (void) {
 
 //ADD
 void
-donate_priority (struct thread* receiver) {
+set_donate_priority (struct thread* receiver) {
 	enum intr_level old_level = intr_disable();
-
 	struct thread* cur = thread_current();
+
 	if (receiver->priority < cur->priority)	{
 		receiver->priority = cur->priority;
 	}
+	list_insert_ordered(&receiver->donate_list, &cur->donator_elem, priority_comparer, NULL);
 
 	list_sort(&ready_list, priority_comparer, NULL);
 	intr_set_level(old_level);
 };
+
+int
+restore_donate_priority (struct thread* giver, struct thread* lock_holder) {
+	if (giver == initial_thread) {
+		return;
+	}
+
+	enum intr_level old_level = intr_disable();
+	intr_set_level(old_level);
+
+	// msg("giver: %s", giver->name);
+	// msg("lock holder: %s", lock_holder->name);
+
+	list_remove(&giver->donator_elem);
+	if (!list_empty(&lock_holder->donate_list)) {
+		return list_entry(list_front(&lock_holder->donate_list), struct thread, donator_elem)->priority;
+	} else {
+		return lock_holder->original_priority;
+	}
+}
+//ADD
+
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
@@ -480,12 +502,13 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	memset (t, 0, sizeof *t);
 	t->status = THREAD_BLOCKED;
-	t->sleep_time = 0;
+	t->sleep_time = 0; //ADD
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->original_priority = priority;
 	t->magic = THREAD_MAGIC;
+	list_init(&t->donate_list);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

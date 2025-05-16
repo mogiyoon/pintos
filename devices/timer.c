@@ -89,6 +89,7 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
+	// int64_t start = thread_ticks();
 	ASSERT (intr_get_level () == INTR_ON);
 	
 	thread_sleep(ticks);

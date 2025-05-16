@@ -97,6 +97,10 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
+	/* Donate */
+	struct list donate_list;
+	struct list_elem donator_elem;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -135,7 +139,9 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
-void donate_priority (struct thread* receiver); //ADD
+void set_donate_priority (struct thread* receiver); //ADD
+int restore_donate_priority (struct thread* giver, struct thread* lock_holder); //ADD
+
 int thread_get_priority (void);
 void thread_set_priority (int);
 
@@ -149,6 +155,8 @@ void do_iret (struct intr_frame *tf);
 //ADD
 void thread_sleep (int64_t ticks);
 void thread_wake (void);
+
+bool priority_comparer(struct list_elem* a, struct list_elem* b, void *aux);
 //ADD
 
 #endif /* threads/thread.h */
