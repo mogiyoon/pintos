@@ -97,9 +97,10 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
-	/* Donate */
+	/* Donate */ //ADD
 	struct list donate_list;
 	struct list_elem donator_elem;
+	
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

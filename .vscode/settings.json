@@ -2,6 +2,11 @@
   "files.associations": {
     "stdio.h": "c",
     "interrupt.h": "c",
-    "synch.h": "c"
+    "synch.h": "c",
+    "init.h": "c",
+    "file.h": "c",
+    "intr-stubs.h": "c",
+    "mmu.h": "c",
+    "timer.h": "c"
   }
 }

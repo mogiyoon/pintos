@@ -183,7 +183,7 @@ process_exec (void *f_name) {
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
-
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -204,6 +204,8 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	while(1){
+	}
 	return -1;
 }
 
@@ -328,32 +330,41 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	char *token, *save_ptr;
+	char** token_list[64];
+	char** pointer_addr[64];
+	int argc = 0;
+	
+	/* Adding parsed arguments */
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+		token_list[argc++] = token;
+	}
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
-		goto done;
+	goto done;
 	process_activate (thread_current ());
-
+	
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (token_list[0]);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", token_list[0]);
 		goto done;
 	}
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
-			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
-			|| ehdr.e_type != 2
-			|| ehdr.e_machine != 0x3E // amd64
-			|| ehdr.e_version != 1
-			|| ehdr.e_phentsize != sizeof (struct Phdr)
-			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+	|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
+	|| ehdr.e_type != 2
+	|| ehdr.e_machine != 0x3E // amd64
+	|| ehdr.e_version != 1
+	|| ehdr.e_phentsize != sizeof (struct Phdr)
+	|| ehdr.e_phnum > 1024) {
+		printf ("load: %s: error loading executable\n", token_list[0]);
 		goto done;
 	}
-
+	
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++) {
@@ -411,14 +422,56 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (!setup_stack (if_))
 		goto done;
 
+		
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
+	
+	char* stack_pointer = if_->rsp;
+	pointer_addr[0] = NULL;
+	pointer_addr[argc + 1] = NULL;
+	char** argv = NULL;
 
-	/* TODO: Your code goes here.
+	msg("pointer: %p", stack_pointer);
+	msg("this");
+	for (int i = 0; i < argc; i++) {
+		stack_pointer -= 1;
+		*stack_pointer = '\0';
+		stack_pointer -= strlen(token_list[i]);
+		memcpy(stack_pointer, token_list[i], strlen(token_list[i]));
+		pointer_addr[i+1] = stack_pointer;
+		msg("token pointer: %p", stack_pointer);
+		msg("token: %s", stack_pointer);
+	}
+	int padding_size = (int)(stack_pointer)%8;
+	if (padding_size != 0) {
+		stack_pointer -= padding_size;
+		memset(stack_pointer, 0, padding_size);
+		msg("padding pointer: %p", stack_pointer);
+	}
+	msg("argc: %d", argc);
+	for (int i = 0; i < argc + 2; i++) {
+		stack_pointer -= sizeof(char*);
+		*((char**)stack_pointer) = pointer_addr[argc + 1 - i];
+		msg("addr pointer: %p", stack_pointer);
+		msg("argv value: %p", *((char**)stack_pointer));
+		msg("argv value: %s", *((char**)stack_pointer));
+		if (i == argc) {
+			msg("assign");
+			argv = (char**)stack_pointer;
+		}
+	}
+
+	msg("argv: %p", argv);
+	msg("argv: %s", argv[0]);
+	if_->R.rsi = argv;
+	if_->R.rdi = argc;
+	if_->rsp = argv;
+
+	/* stack_pointer: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
 	success = true;
-
+	
 done:
 	/* We arrive here whether the load is successful or not. */
 	file_close (file);

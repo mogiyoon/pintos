@@ -69,6 +69,7 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
+bool donate_priority_comparer(struct list_elem* a, struct list_elem* b, void *aux);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -175,7 +176,7 @@ thread_print_stats (void) {
    for the new thread, or TID_ERROR if creation fails.
 
    If thread_start() has been called, then the new thread may be
-   scheduled before thread_create() returns.  It could even exit
+   scheduled before thread_create() returns. It could even exit
    before thread_create() returns.  Contrariwise, the original
    thread may run for any amount of time before the new thread is
    scheduled.  Use a semaphore or some other form of
@@ -366,11 +367,16 @@ set_donate_priority (struct thread* receiver) {
 	enum intr_level old_level = intr_disable();
 	struct thread* cur = thread_current();
 
+	// msg("Cur: %s", cur->name);
+	// msg("Receiver: %s", receiver->name);
+	// msg("Receiver pri: %d", receiver->priority);
+	if (receiver->status == THREAD_BLOCKED) {
+		thread_unblock(receiver);
+	}
 	if (receiver->priority < cur->priority)	{
 		receiver->priority = cur->priority;
 	}
-	list_insert_ordered(&receiver->donate_list, &cur->donator_elem, priority_comparer, NULL);
-
+	list_insert_ordered(&receiver->donate_list, &cur->donator_elem, donate_priority_comparer, NULL);
 	list_sort(&ready_list, priority_comparer, NULL);
 	intr_set_level(old_level);
 };
@@ -381,6 +387,7 @@ restore_donate_priority (struct thread* giver, struct thread* lock_holder) {
 		return;
 	}
 
+	// msg("lock holder: %s", lock_holder->name);
 	enum intr_level old_level = intr_disable();
 	intr_set_level(old_level);
 
@@ -692,8 +699,32 @@ allocate_tid (void) {
 //ADD
 bool
 priority_comparer(struct list_elem* a, struct list_elem* b, void *aux) {
-	struct thread* thread_a = list_entry_self(a, struct thread, elem);
-	struct thread* thread_b = list_entry_self(b, struct thread, elem);
+	struct thread* thread_a; 
+	struct thread* thread_b;
+
+	thread_a = list_entry_self(a, struct thread, elem);
+	thread_b = list_entry_self(b, struct thread, elem);
+
+	if (thread_a->sleep_time < thread_b->sleep_time) {
+		return true;
+	} 
+	else if (thread_a->sleep_time == thread_b->sleep_time) 
+	{
+		if (thread_a->priority > thread_b->priority) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool
+donate_priority_comparer(struct list_elem* a, struct list_elem* b, void *aux) {
+	struct thread* thread_a; 
+	struct thread* thread_b;
+	
+	thread_a = list_entry_self(a, struct thread, donator_elem);
+	thread_b = list_entry_self(b, struct thread, donator_elem);
 
 	if (thread_a->sleep_time < thread_b->sleep_time) {
 		return true;
