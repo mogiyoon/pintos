@@ -7,6 +7,15 @@
     "file.h": "c",
     "intr-stubs.h": "c",
     "mmu.h": "c",
-    "timer.h": "c"
+    "timer.h": "c",
+    "syscall.h": "c",
+    "loader.h": "c",
+    "thread.h": "c",
+    "process.h": "c",
+    "debug.h": "c",
+    "off_t.h": "c",
+    "filesys.h": "c",
+    "gdt.h": "c",
+    "vaddr.h": "c"
   }
 }

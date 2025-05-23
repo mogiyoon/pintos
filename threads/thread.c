@@ -202,6 +202,11 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	//ADD children
+	if (thread_current() != NULL) {
+		list_push_back(&thread_current()->child_list, &t->sibling);
+	}
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -331,15 +336,16 @@ thread_tid (void) {
 void
 thread_exit (void) {
 	ASSERT (!intr_context ());
-
+	sema_up(&thread_current()->sema_wait);
 #ifdef USERPROG
 	process_exit ();
 #endif
-
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
-	intr_disable ();
+	enum intr_level old_level = intr_disable ();
 	do_schedule (THREAD_DYING);
+	intr_set_level(old_level);
+	msg("end");
 	NOT_REACHED ();
 }
 
@@ -515,7 +521,16 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->original_priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	//donate
 	list_init(&t->donate_list);
+	
+	//init file descriptor table
+	t->next_fd = 2;
+
+	//init child
+	list_init(&t->child_list);
+	sema_init(&t->sema_wait, 0);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

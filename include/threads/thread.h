@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -100,7 +101,17 @@ struct thread {
 	/* Donate */ //ADD
 	struct list donate_list;
 	struct list_elem donator_elem;
-	
+
+	/* File Descriptor */
+	struct file* file_dt[64];
+	int next_fd;
+
+	/* Use for wait */
+	struct semaphore sema_wait;
+
+	/* Child thread */
+	struct list child_list;
+	struct list_elem sibling;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

@@ -17,6 +17,7 @@
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -49,6 +50,9 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+
+	char* save_ptr;
+	file_name = strtok_r (file_name, " ", &save_ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -118,11 +122,22 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       this function. */
 static void
 __do_fork (void *aux) {
+	// msg("fork");
 	struct intr_frame if_;
 	struct thread *parent = (struct thread *) aux;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
+	//ADD
+	parent_if->R.rbx = current->tf.R.rbx;
+	// parent_if->rsp = current->tf.rsp; //Need to modify?
+	parent_if->R.rbp = current->tf.R.rbp;
+	parent_if->R.r12 = current->tf.R.r12;
+	parent_if->R.r13 = current->tf.R.r13;
+	parent_if->R.r14 = current->tf.R.r14;
+	parent_if->R.r15 = current->tf.R.r15;
+	//ADD
+
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -183,7 +198,7 @@ process_exec (void *f_name) {
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -201,10 +216,20 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-	while(1){
+	// msg("wait");
+	struct thread* curr = thread_current();
+	struct thread* temp_children;
+	if (!list_empty(&curr->child_list)) {
+		temp_children = list_entry(list_front(&curr->child_list), struct thread, sibling);
+		while (temp_children->tid != child_tid)
+		{
+			if (temp_children->sibling.next->next != NULL) {
+				temp_children = list_entry(temp_children->sibling.next, struct thread, sibling);
+			} else {
+				return -1;
+			}
+		}
+		sema_down(&temp_children->sema_wait);
 	}
 	return -1;
 }
@@ -214,10 +239,10 @@ void
 process_exit (void) {
 	struct thread *curr = thread_current ();
 	/* TODO: Your code goes here.
-	 * TODO: Implement process termination message (see
-	 * TODO: project2/process_termination.html).
-	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	* TODO: Implement process termination message (see
+	* TODO: project2/process_termination.html).
+	* TODO: We recommend you to implement process resource cleanup here. */
+	// msg("process exit work");
 	process_cleanup ();
 }
 
@@ -431,38 +456,38 @@ load (const char *file_name, struct intr_frame *if_) {
 	pointer_addr[argc + 1] = NULL;
 	char** argv = NULL;
 
-	msg("pointer: %p", stack_pointer);
-	msg("this");
+	// msg("pointer: %p", stack_pointer);
+	// msg("this");
 	for (int i = 0; i < argc; i++) {
 		stack_pointer -= 1;
 		*stack_pointer = '\0';
 		stack_pointer -= strlen(token_list[i]);
 		memcpy(stack_pointer, token_list[i], strlen(token_list[i]));
 		pointer_addr[i+1] = stack_pointer;
-		msg("token pointer: %p", stack_pointer);
-		msg("token: %s", stack_pointer);
+		// msg("token pointer: %p", stack_pointer);
+		// msg("token: %s", stack_pointer);
 	}
 	int padding_size = (int)(stack_pointer)%8;
 	if (padding_size != 0) {
 		stack_pointer -= padding_size;
 		memset(stack_pointer, 0, padding_size);
-		msg("padding pointer: %p", stack_pointer);
+		// msg("padding pointer: %p", stack_pointer);
 	}
-	msg("argc: %d", argc);
+	// msg("argc: %d", argc);
 	for (int i = 0; i < argc + 2; i++) {
 		stack_pointer -= sizeof(char*);
 		*((char**)stack_pointer) = pointer_addr[argc + 1 - i];
-		msg("addr pointer: %p", stack_pointer);
-		msg("argv value: %p", *((char**)stack_pointer));
-		msg("argv value: %s", *((char**)stack_pointer));
+		// msg("addr pointer: %p", stack_pointer);
+		// msg("argv value: %p", *((char**)stack_pointer));
+		// msg("argv value: %s", *((char**)stack_pointer));
 		if (i == argc) {
-			msg("assign");
+			// msg("assign");
 			argv = (char**)stack_pointer;
 		}
 	}
 
-	msg("argv: %p", argv);
-	msg("argv: %s", argv[0]);
+	// msg("argv: %p", argv);
+	// msg("argv: %s", argv[0]);
 	if_->R.rsi = argv;
 	if_->R.rdi = argc;
 	if_->rsp = argv;
