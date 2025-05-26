@@ -19,6 +19,7 @@
     "vaddr.h": "c",
     "inode.h": "c",
     "directory.h": "c",
-    "*.inc": "c"
+    "*.inc": "c",
+    "malloc.h": "c"
   }
 }

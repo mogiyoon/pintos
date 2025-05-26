@@ -521,6 +521,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	//init file descriptor table
 	t->next_fd = 2;
 
+	for (int i = 0; i < sizeof(t->child_status)/sizeof(t->child_status[0]); i++) {
+		t->child_status[i] = -1;
+	}
+
 	//init child
 	list_init(&t->child_list);
 	sema_init(&t->sema_fork, 0);

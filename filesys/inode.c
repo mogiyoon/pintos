@@ -31,6 +31,7 @@ struct inode {
 	struct list_elem elem;              /* Element in inode list. */
 	disk_sector_t sector;               /* Sector number of disk location. */
 	int open_cnt;                       /* Number of openers. */
+	int ref_cnt;												/* Number of references. */
 	bool removed;                       /* True if deleted, false otherwise. */
 	int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
 	struct inode_disk data;             /* Inode content. */
@@ -123,6 +124,7 @@ inode_open (disk_sector_t sector) {
 	list_push_front (&open_inodes, &inode->elem);
 	inode->sector = sector;
 	inode->open_cnt = 1;
+	inode->ref_cnt = 1;
 	inode->deny_write_cnt = 0;
 	inode->removed = false;
 	disk_read (filesys_disk, inode->sector, &inode->data);
@@ -310,4 +312,9 @@ inode_allow_write (struct inode *inode) {
 off_t
 inode_length (const struct inode *inode) {
 	return inode->data.length;
+}
+
+int
+inode_get_deny (struct inode* inode) {
+	return inode->deny_write_cnt;
 }

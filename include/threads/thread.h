@@ -103,8 +103,9 @@ struct thread {
 	struct list_elem donator_elem;
 
 	/* File Descriptor */
-	struct file* file_dt[64];
+	struct file* file_dt[32];
 	int next_fd;
+	struct file* running_file;
 
 	/* Use for wait */
 	struct semaphore sema_wait;
@@ -118,7 +119,7 @@ struct thread {
 	/* Child thread */
 	struct list child_list;
 	struct list_elem sibling;
-	int child_status[16];
+	int child_status[32];
 
 	/* Exit status */
 	int exit_status;

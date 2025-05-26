@@ -14,6 +14,7 @@
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
@@ -162,14 +163,20 @@ int exec (const char *file) {
 	if (ptr_error(file, KADDR)) {
 		exit(-1);
 	}
+
 	char* fn_copy = palloc_get_page (0);
-	if (fn_copy == NULL)
+	if (fn_copy == NULL) {
 		exit(-1);
+	}
 	strlcpy (fn_copy, file, PGSIZE);
+
 	process_exec(fn_copy);
 }
 
 int wait (pid_t child_pid) {
+	if (child_pid >= (sizeof(thread_current()->child_status)/sizeof(thread_current()->child_status[0]))) {
+		exit(-1);
+	}
 	return process_wait(child_pid);
 }
 
@@ -210,13 +217,21 @@ int open (const char *file) {
 	int fd_num;
 
 	if (new_file != NULL) {
-		curr->file_dt[curr->next_fd] = new_file;
-		fd_num = curr->next_fd;
-		curr->next_fd++;
-		return fd_num;
-	} else {
-		return -1;
+		while (curr->file_dt[curr->next_fd] != NULL) {
+			curr->next_fd++;
+		}
+		if (curr->file_dt[curr->next_fd] == NULL) {
+			curr->file_dt[curr->next_fd] = new_file;
+			fd_num = curr->next_fd;
+			if (inode_get_deny(file_get_inode(new_file))) {
+				file_deny_write(new_file);
+			}
+
+			curr->next_fd++;
+			return fd_num;
+		}
 	}
+	return -1;
 }
 
 int filesize (int fd) {
@@ -235,7 +250,12 @@ int read (int fd, void *buffer, unsigned length) {
 
 	if (fd == 0) {
 		for (unsigned i = 0; i < length; i++) {
-			((uint8_t *)buffer)[i] = input_getc(); // 키보드 입력 1바이트씩 받기
+			int* input = input_getc();
+			if (input == NULL && *input == NULL) {
+				exit(-1);
+			}
+			((uint8_t *)buffer)[i] = input;
+
 		}
 		return length;
 	}
@@ -261,21 +281,47 @@ int write (int fd, const void *buffer, unsigned length) {
 	struct thread* curr = thread_current();
 	if (fd >= sizeof(curr->file_dt)/sizeof(curr->file_dt[0]) || fd < 0 || curr->file_dt[fd] == NULL) {
 		return -1;
-	} 
+	}
 
-	return file_write(curr->file_dt[fd], buffer, length);
+	// if (file_get_deny(curr->file_dt[fd])) {
+	// 	return 0;
+	// }
+
+	return file_write(curr->file_dt[fd], buffer, length);;
 }
 
 void seek (int fd, unsigned position) {
+	struct file* tmp_file = thread_current()->file_dt[fd];
+	if (tmp_file == NULL) {
+		exit(-1);
+	}
 
+	file_seek(tmp_file, position);
 }
 
 unsigned tell (int fd) {
+	struct file* tmp_file = thread_current()->file_dt[fd];
+	if (ptr_error(tmp_file, KADDR)) {
+		exit(-1);
+	}
 
+	return file_tell(tmp_file);
 }
 
 void close (int fd) {
+	if (fd >= (sizeof(thread_current()->file_dt)/sizeof(thread_current()->file_dt[0]))) {
+		exit(-1);
+	}
 
+	struct file* tmp_file = thread_current()->file_dt[fd];
+	if (tmp_file == NULL) {
+		return;
+	}
+
+	thread_current()->file_dt[fd] = NULL;
+	if (thread_current()->next_fd > fd) {
+		thread_current()->next_fd = fd;
+	}
 }
 
 static bool ptr_error (char* input_ptr, void* aux) {

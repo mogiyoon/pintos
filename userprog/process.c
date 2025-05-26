@@ -10,6 +10,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -84,6 +85,9 @@ struct th_w_if {
 
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+	// printf("fork\n");
+	// printf("parent: %s\n", thread_current()->name);
+	// printf("child: %s\n", name);
 	enum intr_level old_level = intr_disable();
 	struct th_w_if tmp_twi;
 	tmp_twi.the_thread = thread_current();
@@ -203,7 +207,7 @@ __do_fork (void *aux) {
 	* TODO:       the resources of parent.*/
 	
 	current->next_fd = parent->next_fd;
-	for (int i = 0; i < 64; i++) {
+	for (int i = 0; i < (sizeof(current->file_dt)/sizeof(current->file_dt[0])); i++) {
 		if (parent->file_dt[i] != NULL) {
 			current->file_dt[i] = file_duplicate(parent->file_dt[i]);
 		}
@@ -227,6 +231,7 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
+	// printf("exec\n");
 	char *file_name = f_name;
 	bool success;
 
@@ -247,8 +252,10 @@ process_exec (void *f_name) {
 	palloc_free_page (file_name);
 
 	/* If load failed, quit. */
-	if (!success)
+	if (!success) {
 		return -1;
+	}
+
 	
 	
 	/* Start switched process. */
@@ -292,19 +299,19 @@ process_wait (tid_t child_tid UNUSED) {
 		sema_down(&temp_children->sema_wait);
 	} 
 
-	if (curr->child_status[child_tid] != NULL) {
-		int return_value = curr->child_status[child_tid];
-		curr->child_status[child_tid] = NULL;
-		return return_value;
-	} else {
-		return -1;
-	}
+	int return_value = curr->child_status[child_tid];
+	curr->child_status[child_tid] = -1;
+	return return_value;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
+	if (curr->running_file != NULL) {
+		file_close(curr->running_file);
+	}
+		
 	/* TODO: Your code goes here.
 	* TODO: Implement process termination message (see
 	* TODO: project2/process_termination.html).
@@ -439,15 +446,18 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Open executable file. */
 	file = filesys_open (token_list[0]);
-	// intr_set_level(old_level);
-
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", token_list[0]);
+		// printf ("load: %s: open failed\n", token_list[0]);
+		exit(-1);
 		goto done;
 	}
+	thread_current()->running_file = file;
+	file_deny_write(file);
+	// printf("load cur %s\n", thread_current()->name);
+	// printf("load inode %p\n", file_get_inode(file));
+
 
 	/* Read and verify executable header. */
-	// old_level = intr_enable();
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 	|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 	|| ehdr.e_type != 2
@@ -554,7 +564,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
 	return success;
 }
 
