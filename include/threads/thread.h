@@ -109,9 +109,19 @@ struct thread {
 	/* Use for wait */
 	struct semaphore sema_wait;
 
+	/* Use for fork */
+	struct semaphore sema_fork;
+
+	/* Parent thread */
+	struct thread* parent_thread;
+
 	/* Child thread */
 	struct list child_list;
 	struct list_elem sibling;
+	int child_status[16];
+
+	/* Exit status */
+	int exit_status;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

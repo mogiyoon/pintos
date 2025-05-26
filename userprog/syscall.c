@@ -9,6 +9,7 @@
 #include "threads/loader.h"
 #include "threads/vaddr.h"
 #include "threads/flags.h"
+#include "threads/palloc.h"
 #include "userprog/gdt.h"
 #include "userprog/process.h"
 #include "filesys/filesys.h"
@@ -31,7 +32,7 @@ typedef int pid_t;
 
 void halt (void) NO_RETURN;
 void exit (int status) NO_RETURN;
-pid_t fork (const char *thread_name);
+pid_t fork (const struct intr_frame* thread_frame);
 int exec (const char *file);
 int wait (pid_t child_pid);
 bool create (const char *file, unsigned initial_size);
@@ -84,11 +85,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t arg6 = f->R.r9;
 	
 	uint64_t result = 0;
-	// msg("sysnum = %d", arg0);
+	// printf("sysnum = %d\n", arg0);
 	// printf ("system wow call!\n");
-
-	// uint64_t* temp = thread_current()->file_dt[1];
-	// *temp = "1\n";
 
 	switch (arg0)
 	{
@@ -99,7 +97,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			exit((int)arg1);
 			break;
 		case SYS_FORK:
-			result = fork((char*)arg1);
+			result = fork(f);
 			break;
 		case SYS_EXEC:
 			result = exec((char*)arg1);
@@ -149,23 +147,26 @@ void halt (void) {
 void exit (int status) {
 	struct thread *curr = thread_current();
 	if (curr != NULL) {
-		printf("%s: exit(%d)\n", curr->name, status);
+		curr->exit_status = status;
+		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
 		thread_exit();
-	} else {
-		 return;
 	}
 }
 
-pid_t fork (const char *thread_name) {
-	if (ptr_error(thread_name, KADDR)) {
-		exit(-1);
-	}
+pid_t fork (const struct intr_frame* thread_frame) {
+	char* thread_name = thread_frame->R.rdi;
+	return process_fork(thread_name, thread_frame);
 }
 
 int exec (const char *file) {
 	if (ptr_error(file, KADDR)) {
 		exit(-1);
 	}
+	char* fn_copy = palloc_get_page (0);
+	if (fn_copy == NULL)
+		exit(-1);
+	strlcpy (fn_copy, file, PGSIZE);
+	process_exec(fn_copy);
 }
 
 int wait (pid_t child_pid) {
@@ -197,15 +198,10 @@ bool remove (const char *file) {
 	if (ptr_error(file, KADDR)) {
 		exit(-1);
 	}
-
 }
 
 int open (const char *file) {
 	if (ptr_error(file, KADDR)) {
-		exit(-1);
-	}
-
-	if (strlen(file) == 0) {
 		exit(-1);
 	}
 
@@ -224,7 +220,12 @@ int open (const char *file) {
 }
 
 int filesize (int fd) {
+	struct thread* curr = thread_current();
+	if (fd >= sizeof(curr->file_dt)/sizeof(curr->file_dt[0]) || fd < 0 || curr->file_dt[fd] == NULL) {
+		return -1;
+	}
 
+	return file_length(curr->file_dt[fd]);
 }
 
 int read (int fd, void *buffer, unsigned length) {
@@ -232,21 +233,19 @@ int read (int fd, void *buffer, unsigned length) {
 		exit(-1);
 	}
 
-	msg("fd num: %d", fd);
-	msg("read len: %d", length);
-
 	if (fd == 0) {
 		for (unsigned i = 0; i < length; i++) {
 			((uint8_t *)buffer)[i] = input_getc(); // 키보드 입력 1바이트씩 받기
 		}
 		return length;
 	}
+
 	struct thread* curr = thread_current();
-	if (curr->file_dt[fd] != NULL) {
-		return file_read(curr->file_dt[fd], buffer, length);
-	} else {
+	if (fd >= sizeof(curr->file_dt)/sizeof(curr->file_dt[0]) || fd < 0 || curr->file_dt[fd] == NULL) {
 		return -1;
 	}
+
+	return file_read(curr->file_dt[fd], buffer, length);
 }
 
 int write (int fd, const void *buffer, unsigned length) {
@@ -258,7 +257,12 @@ int write (int fd, const void *buffer, unsigned length) {
 		putbuf(buffer, length);
 		return length;
 	}
+
 	struct thread* curr = thread_current();
+	if (fd >= sizeof(curr->file_dt)/sizeof(curr->file_dt[0]) || fd < 0 || curr->file_dt[fd] == NULL) {
+		return -1;
+	} 
+
 	return file_write(curr->file_dt[fd], buffer, length);
 }
 

@@ -16,6 +16,9 @@
     "off_t.h": "c",
     "filesys.h": "c",
     "gdt.h": "c",
-    "vaddr.h": "c"
+    "vaddr.h": "c",
+    "inode.h": "c",
+    "directory.h": "c",
+    "*.inc": "c"
   }
 }

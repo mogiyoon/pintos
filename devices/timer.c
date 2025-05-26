@@ -125,7 +125,6 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	// msg("tick: %d   tid: %d", ticks, thread_current ()->tid);
 	thread_wake();
 	thread_tick ();
 }

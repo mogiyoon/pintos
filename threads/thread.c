@@ -201,9 +201,10 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
-
-	//ADD children
-	if (thread_current() != NULL) {
+	
+	//ADD parent & children
+	if (thread_current() != NULL && name != "idle") {
+		t->parent_thread = thread_current();
 		list_push_back(&thread_current()->child_list, &t->sibling);
 	}
 
@@ -285,11 +286,7 @@ thread_wake (void) {
    update other data. */
 void
 thread_unblock (struct thread *t) {
-	enum intr_level old_level;
-
 	ASSERT (is_thread (t));
-
-	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
 	// list_push_back(&ready_list, &t->elem);
 	//ADD
@@ -298,7 +295,6 @@ thread_unblock (struct thread *t) {
 	if (thread_current() != idle_thread && thread_get_priority() < t->priority) {
 		thread_yield();
 	}
-	intr_set_level (old_level);
 }
 
 /* Returns the name of the running thread. */
@@ -336,13 +332,20 @@ thread_tid (void) {
 void
 thread_exit (void) {
 	ASSERT (!intr_context ());
-	sema_up(&thread_current()->sema_wait);
+	struct thread* cur = thread_current();
+	// printf("debug\n");
+	// printf("cur name: %s\n", thread_current()->name);
+	list_remove(&cur->sibling);
+	enum intr_level old_level = intr_disable ();
+	if (!list_empty(&cur->sema_wait.waiters)) {
+		sema_up(&cur->sema_wait);
+	}
 #ifdef USERPROG
 	process_exit ();
 #endif
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
-	enum intr_level old_level = intr_disable ();
+	cur->parent_thread->child_status[cur->tid] = cur->exit_status;
 	do_schedule (THREAD_DYING);
 	intr_set_level(old_level);
 	msg("end");
@@ -373,9 +376,6 @@ set_donate_priority (struct thread* receiver) {
 	enum intr_level old_level = intr_disable();
 	struct thread* cur = thread_current();
 
-	// msg("Cur: %s", cur->name);
-	// msg("Receiver: %s", receiver->name);
-	// msg("Receiver pri: %d", receiver->priority);
 	if (receiver->status == THREAD_BLOCKED) {
 		thread_unblock(receiver);
 	}
@@ -392,13 +392,6 @@ restore_donate_priority (struct thread* giver, struct thread* lock_holder) {
 	if (giver == initial_thread) {
 		return;
 	}
-
-	// msg("lock holder: %s", lock_holder->name);
-	enum intr_level old_level = intr_disable();
-	intr_set_level(old_level);
-
-	// msg("giver: %s", giver->name);
-	// msg("lock holder: %s", lock_holder->name);
 
 	list_remove(&giver->donator_elem);
 	if (!list_empty(&lock_holder->donate_list)) {
@@ -530,6 +523,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	//init child
 	list_init(&t->child_list);
+	sema_init(&t->sema_fork, 0);
 	sema_init(&t->sema_wait, 0);
 }
 
