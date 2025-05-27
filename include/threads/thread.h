@@ -29,6 +29,9 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define FD_MAX 32
+#define CHILD_MAX 32
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -103,7 +106,7 @@ struct thread {
 	struct list_elem donator_elem;
 
 	/* File Descriptor */
-	struct file* file_dt[32];
+	struct file* file_dt[FD_MAX];
 	int next_fd;
 	struct file* running_file;
 
@@ -119,7 +122,7 @@ struct thread {
 	/* Child thread */
 	struct list child_list;
 	struct list_elem sibling;
-	int child_status[32];
+	int child_status[CHILD_MAX];
 
 	/* Exit status */
 	int exit_status;

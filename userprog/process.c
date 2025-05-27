@@ -207,7 +207,7 @@ __do_fork (void *aux) {
 	* TODO:       the resources of parent.*/
 	
 	current->next_fd = parent->next_fd;
-	for (int i = 0; i < (sizeof(current->file_dt)/sizeof(current->file_dt[0])); i++) {
+	for (int i = 0; i < FD_MAX; i++) {
 		if (parent->file_dt[i] != NULL) {
 			current->file_dt[i] = file_duplicate(parent->file_dt[i]);
 		}
@@ -249,17 +249,21 @@ process_exec (void *f_name) {
 	
 	/* And then load the binary */
 	success = load (file_name, &_if);
-	palloc_free_page (file_name);
-
 	/* If load failed, quit. */
 	if (!success) {
 		return -1;
-	}
+	}	
+	
+	char* save_ptr;
+	char* running_file_name = strtok_r (file_name, " ", &save_ptr);
+	struct file* running_file = filesys_open(running_file_name);
+	thread_current()->running_file = running_file;
+	file_deny_write(running_file);
+	// printf("exec running file inode: %p\n", running_file->inode);
 
-	
-	
+	palloc_free_page (file_name);
+
 	/* Start switched process. */
-	// intr_set_level(old_level);
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -308,6 +312,13 @@ process_wait (tid_t child_tid UNUSED) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
+	for (int i = 0; i < FD_MAX; i++) {
+		if (curr->file_dt[i]) {
+			file_close(curr->file_dt[i]);
+			curr->file_dt[i] = NULL;
+		}
+	}
+
 	if (curr->running_file != NULL) {
 		file_close(curr->running_file);
 	}
@@ -447,15 +458,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Open executable file. */
 	file = filesys_open (token_list[0]);
 	if (file == NULL) {
-		// printf ("load: %s: open failed\n", token_list[0]);
+		printf ("load: %s: open failed\n", token_list[0]);
 		exit(-1);
 		goto done;
 	}
-	thread_current()->running_file = file;
-	file_deny_write(file);
-	// printf("load cur %s\n", thread_current()->name);
-	// printf("load inode %p\n", file_get_inode(file));
-
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -564,6 +570,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 done:
 	/* We arrive here whether the load is successful or not. */
+	file_close(file);
 	return success;
 }
 

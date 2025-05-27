@@ -174,7 +174,7 @@ int exec (const char *file) {
 }
 
 int wait (pid_t child_pid) {
-	if (child_pid >= (sizeof(thread_current()->child_status)/sizeof(thread_current()->child_status[0]))) {
+	if (child_pid >= CHILD_MAX) {
 		exit(-1);
 	}
 	return process_wait(child_pid);
@@ -213,6 +213,10 @@ int open (const char *file) {
 	}
 
 	struct file* new_file = filesys_open(file);
+
+	// printf("open inode: %p\n", new_file->inode);
+	// printf("deny write cnt: %d\n", new_file->inode->deny_write_cnt);
+	// printf("inode open cnt: %d\n", new_file->inode->open_cnt);
 	struct thread* curr = thread_current();
 	int fd_num;
 
@@ -223,10 +227,6 @@ int open (const char *file) {
 		if (curr->file_dt[curr->next_fd] == NULL) {
 			curr->file_dt[curr->next_fd] = new_file;
 			fd_num = curr->next_fd;
-			if (inode_get_deny(file_get_inode(new_file))) {
-				file_deny_write(new_file);
-			}
-
 			curr->next_fd++;
 			return fd_num;
 		}
@@ -236,7 +236,7 @@ int open (const char *file) {
 
 int filesize (int fd) {
 	struct thread* curr = thread_current();
-	if (fd >= sizeof(curr->file_dt)/sizeof(curr->file_dt[0]) || fd < 0 || curr->file_dt[fd] == NULL) {
+	if (fd >= FD_MAX || fd < 0 || curr->file_dt[fd] == NULL) {
 		return -1;
 	}
 
@@ -250,18 +250,13 @@ int read (int fd, void *buffer, unsigned length) {
 
 	if (fd == 0) {
 		for (unsigned i = 0; i < length; i++) {
-			int* input = input_getc();
-			if (input == NULL && *input == NULL) {
-				exit(-1);
-			}
-			((uint8_t *)buffer)[i] = input;
-
+			((uint8_t *)buffer)[i] = input_getc();
 		}
 		return length;
 	}
 
 	struct thread* curr = thread_current();
-	if (fd >= sizeof(curr->file_dt)/sizeof(curr->file_dt[0]) || fd < 0 || curr->file_dt[fd] == NULL) {
+	if (fd >= FD_MAX || fd < 0 || curr->file_dt[fd] == NULL) {
 		return -1;
 	}
 
@@ -279,13 +274,13 @@ int write (int fd, const void *buffer, unsigned length) {
 	}
 
 	struct thread* curr = thread_current();
-	if (fd >= sizeof(curr->file_dt)/sizeof(curr->file_dt[0]) || fd < 0 || curr->file_dt[fd] == NULL) {
+	if (fd >= FD_MAX || fd < 0 || curr->file_dt[fd] == NULL) {
 		return -1;
 	}
 
-	// if (file_get_deny(curr->file_dt[fd])) {
-	// 	return 0;
-	// }
+	if (inode_get_deny(file_get_inode(curr->file_dt[fd]))) {
+		return 0;	
+	}
 
 	return file_write(curr->file_dt[fd], buffer, length);;
 }
@@ -309,7 +304,7 @@ unsigned tell (int fd) {
 }
 
 void close (int fd) {
-	if (fd >= (sizeof(thread_current()->file_dt)/sizeof(thread_current()->file_dt[0]))) {
+	if (fd >= FD_MAX) {
 		exit(-1);
 	}
 
@@ -318,6 +313,8 @@ void close (int fd) {
 		return;
 	}
 
+	file_close(thread_current()->file_dt[fd]);
+	
 	thread_current()->file_dt[fd] = NULL;
 	if (thread_current()->next_fd > fd) {
 		thread_current()->next_fd = fd;
