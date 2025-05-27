@@ -5,7 +5,7 @@
 #include <list.h>
 #include "filesys/off_t.h"
 #include "devices/disk.h"
-
+#include "threads/synch.h"
 
 /* On-disk inode.
  * Must be exactly DISK_SECTOR_SIZE bytes long. */
@@ -21,10 +21,11 @@ struct inode {
 	struct list_elem elem;              /* Element in inode list. */
 	disk_sector_t sector;               /* Sector number of disk location. */
 	int open_cnt;                       /* Number of openers. */
-	int ref_cnt;												/* Number of references. */
+	int read_cnt;												/* Number of references. */
 	bool removed;                       /* True if deleted, false otherwise. */
 	int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
 	struct inode_disk data;             /* Inode content. */
+	struct lock inode_lock;
 };
 
 struct bitmap;
@@ -43,4 +44,7 @@ void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 int inode_get_deny (struct inode* inode);
 
+int inode_get_read (struct inode* inode);
+void inode_read_in (struct inode* inode);
+void inode_read_out (struct inode* inode);
 #endif /* filesys/inode.h */

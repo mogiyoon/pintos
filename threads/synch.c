@@ -204,22 +204,22 @@ lock_acquire (struct lock *lock) {
 
 	
 	//ADD
-	enum intr_level old_level = intr_disable();
-	if (lock->semaphore.value == 0) {
-		if (!list_empty(&lock->semaphore.waiters)) {
-			struct thread* max_pri = list_entry(list_front(&lock->semaphore.waiters), struct thread, elem);
-			if (thread_current()->priority > max_pri->priority) {
-				list_remove(&max_pri->donator_elem);
-				set_donate_priority(lock->holder);
-			}
-		}
-		else {
-			set_donate_priority(lock->holder);
-		}
-	}
+	// enum intr_level old_level = intr_disable();
+	// if (lock->semaphore.value == 0) {
+	// 	if (!list_empty(&lock->semaphore.waiters)) {
+	// 		struct thread* max_pri = list_entry(list_front(&lock->semaphore.waiters), struct thread, elem);
+	// 		if (thread_current()->priority > max_pri->priority) {
+	// 			list_remove(&max_pri->donator_elem);
+	// 			set_donate_priority(lock->holder);
+	// 		}
+	// 	}
+	// 	else {
+	// 		set_donate_priority(lock->holder);
+	// 	}
+	// }
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current();
-	intr_set_level(old_level);
+	// intr_set_level(old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -251,21 +251,21 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
-	struct thread* giver = NULL;
+	// struct thread* giver = NULL;
 	
 	//ADD
-	enum intr_level old_level = intr_disable();
-	if (!list_empty(&lock->semaphore.waiters)) {
-		giver = list_entry(list_front(&lock->semaphore.waiters), struct thread, elem);
-		// msg("release");
-		lock->holder->priority = restore_donate_priority(giver, lock->holder);
-		// msg("cur: %s", thread_current()->name);
-		// msg("lock holder: %s", lock_holder->name);
-		// msg("lock pri: %d", lock_holder->priority); 
-	}
+	// enum intr_level old_level = intr_disable();
+	// if (!list_empty(&lock->semaphore.waiters)) {
+	// 	giver = list_entry(list_front(&lock->semaphore.waiters), struct thread, elem);
+	// 	// msg("release");
+	// 	lock->holder->priority = restore_donate_priority(giver, lock->holder);
+	// 	// msg("cur: %s", thread_current()->name);
+	// 	// msg("lock holder: %s", lock_holder->name);
+	// 	// msg("lock pri: %d", lock_holder->priority); 
+	// }
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
-	intr_set_level(old_level);
+	// intr_set_level(old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false

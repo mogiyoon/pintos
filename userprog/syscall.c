@@ -74,6 +74,8 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
+char* call_name[] = {"halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "create\0", "remove\0", "open\0", "file size\0", "read\0", "write\0", "seek\0", "tell\0", "close\0"};
+
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
@@ -86,7 +88,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t arg6 = f->R.r9;
 	
 	uint64_t result = 0;
-	// printf("sysnum = %d\n", arg0);
+	// printf("sys call = %s\n", call_name[arg0]);
 	// printf ("system wow call!\n");
 
 	switch (arg0)
@@ -205,6 +207,12 @@ bool remove (const char *file) {
 	if (ptr_error(file, KADDR)) {
 		exit(-1);
 	}
+
+	struct file* tmp_file = filesys_open(file);
+	lock_acquire(&tmp_file->inode->inode_lock);
+	bool result = filesys_remove(file);
+	lock_release(&tmp_file->inode->inode_lock);
+	return result;
 }
 
 int open (const char *file) {
@@ -260,7 +268,14 @@ int read (int fd, void *buffer, unsigned length) {
 		return -1;
 	}
 
-	return file_read(curr->file_dt[fd], buffer, length);
+	unsigned int read_len;
+	inode_read_in(&curr->file_dt[fd]->inode);
+	lock_acquire(&curr->file_dt[fd]->inode->inode_lock);
+	read_len = file_read(curr->file_dt[fd], buffer, length);
+	lock_release(&curr->file_dt[fd]->inode->inode_lock);
+	inode_read_out(&curr->file_dt[fd]->inode);
+
+	return read_len;
 }
 
 int write (int fd, const void *buffer, unsigned length) {
@@ -282,7 +297,13 @@ int write (int fd, const void *buffer, unsigned length) {
 		return 0;	
 	}
 
-	return file_write(curr->file_dt[fd], buffer, length);;
+	if (inode_get_read(file_get_inode(curr->file_dt[fd]))) {
+		return 0;	
+	}
+
+	unsigned int write_len;
+	write_len = file_write(curr->file_dt[fd], buffer, length);
+	return write_len;
 }
 
 void seek (int fd, unsigned position) {

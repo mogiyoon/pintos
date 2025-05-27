@@ -102,9 +102,10 @@ inode_open (disk_sector_t sector) {
 
 	/* Initialize. */
 	list_push_front (&open_inodes, &inode->elem);
+	lock_init(&inode->inode_lock);
 	inode->sector = sector;
 	inode->open_cnt = 1;
-	inode->ref_cnt = 1;
+	inode->read_cnt = 0;
 	inode->deny_write_cnt = 0;
 	inode->removed = false;
 	disk_read (filesys_disk, inode->sector, &inode->data);
@@ -297,4 +298,19 @@ inode_length (const struct inode *inode) {
 int
 inode_get_deny (struct inode* inode) {
 	return inode->deny_write_cnt;
+}
+
+int
+inode_get_read (struct inode* inode) {
+	return inode->read_cnt;
+}
+
+void
+inode_read_in (struct inode* inode) {
+	inode->read_cnt++;
+}
+
+void
+inode_read_out (struct inode* inode) {
+	inode->read_cnt--;
 }

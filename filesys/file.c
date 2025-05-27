@@ -11,6 +11,7 @@ file_open (struct inode *inode) {
 	struct file *file = calloc (1, sizeof *file);
 	if (inode != NULL && file != NULL) {
 		file->inode = inode;
+		inode->open_cnt++;
 
 		if (inode->deny_write_cnt > 0) {
 			file_deny_write(file);

@@ -87,9 +87,6 @@ filesys_open (const char *name) {
 	dir_close (dir);
 
 	struct file* tmp_file = file_open (inode);
-	if (tmp_file != NULL && tmp_file->inode->open_cnt >= 1) {
-		file_reopen(inode);
-	}
 	return tmp_file;
 }
 
