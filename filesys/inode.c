@@ -102,10 +102,8 @@ inode_open (disk_sector_t sector) {
 
 	/* Initialize. */
 	list_push_front (&open_inodes, &inode->elem);
-	lock_init(&inode->inode_lock);
 	inode->sector = sector;
 	inode->open_cnt = 1;
-	inode->read_cnt = 0;
 	inode->deny_write_cnt = 0;
 	inode->removed = false;
 	disk_read (filesys_disk, inode->sector, &inode->data);
@@ -168,6 +166,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
 
+	// printf("inode: %p \n", inode);
+	// printf("size: %d \n", size);
 	while (size > 0) {
 		/* Disk sector to read, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
@@ -180,8 +180,10 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 
 		/* Number of bytes to actually copy out of this sector. */
 		int chunk_size = size < min_left ? size : min_left;
-		if (chunk_size <= 0)
+		if (chunk_size <= 0) {
+			// printf("break1\n");
 			break;
+		}
 
 		if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) {
 			/* Read full sector directly into caller's buffer. */
@@ -191,19 +193,23 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 			 * into caller's buffer. */
 			if (bounce == NULL) {
 				bounce = malloc (DISK_SECTOR_SIZE);
-				if (bounce == NULL)
+				if (bounce == NULL) {
+					// printf("break2\n");
 					break;
+				}
 			}
 			disk_read (filesys_disk, sector_idx, bounce);
 			memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
 		}
 
 		/* Advance. */
+		// printf("break3\n");
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_read += chunk_size;
 	}
 	free (bounce);
+	// printf("byte read: %d\n", bytes_read);
 
 	return bytes_read;
 }
@@ -222,7 +228,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
 	if (inode->deny_write_cnt)
 		return 0;
-
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
@@ -266,7 +271,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		bytes_written += chunk_size;
 	}
 	free (bounce);
-
 	return bytes_written;
 }
 
@@ -298,19 +302,4 @@ inode_length (const struct inode *inode) {
 int
 inode_get_deny (struct inode* inode) {
 	return inode->deny_write_cnt;
-}
-
-int
-inode_get_read (struct inode* inode) {
-	return inode->read_cnt;
-}
-
-void
-inode_read_in (struct inode* inode) {
-	inode->read_cnt++;
-}
-
-void
-inode_read_out (struct inode* inode) {
-	inode->read_cnt--;
 }

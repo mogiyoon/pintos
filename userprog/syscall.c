@@ -208,10 +208,7 @@ bool remove (const char *file) {
 		exit(-1);
 	}
 
-	struct file* tmp_file = filesys_open(file);
-	lock_acquire(&tmp_file->inode->inode_lock);
 	bool result = filesys_remove(file);
-	lock_release(&tmp_file->inode->inode_lock);
 	return result;
 }
 
@@ -222,9 +219,6 @@ int open (const char *file) {
 
 	struct file* new_file = filesys_open(file);
 
-	// printf("open inode: %p\n", new_file->inode);
-	// printf("deny write cnt: %d\n", new_file->inode->deny_write_cnt);
-	// printf("inode open cnt: %d\n", new_file->inode->open_cnt);
 	struct thread* curr = thread_current();
 	int fd_num;
 
@@ -269,11 +263,7 @@ int read (int fd, void *buffer, unsigned length) {
 	}
 
 	unsigned int read_len;
-	inode_read_in(&curr->file_dt[fd]->inode);
-	lock_acquire(&curr->file_dt[fd]->inode->inode_lock);
 	read_len = file_read(curr->file_dt[fd], buffer, length);
-	lock_release(&curr->file_dt[fd]->inode->inode_lock);
-	inode_read_out(&curr->file_dt[fd]->inode);
 
 	return read_len;
 }
@@ -294,10 +284,6 @@ int write (int fd, const void *buffer, unsigned length) {
 	}
 
 	if (inode_get_deny(file_get_inode(curr->file_dt[fd]))) {
-		return 0;	
-	}
-
-	if (inode_get_read(file_get_inode(curr->file_dt[fd]))) {
 		return 0;	
 	}
 
@@ -348,14 +334,14 @@ static bool ptr_error (char* input_ptr, void* aux) {
 	} else {
 		//address is kernel area
 		if ((enum waddr)aux == UADDR) {
-			if (is_user_vaddr(input_ptr)) {
-				return true;
+			if (!is_user_vaddr(input_ptr)) {
+				return false;
 			}
 		} else if ((enum waddr)aux == KADDR) {
-			if (is_kernel_vaddr(input_ptr)) {
-				return true;
+			if (!is_kernel_vaddr(input_ptr)) {
+				return false;
 			}
 		}
-		return false;
+		return true;
 	}
 }

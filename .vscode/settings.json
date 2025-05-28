@@ -20,6 +20,8 @@
     "inode.h": "c",
     "directory.h": "c",
     "*.inc": "c",
-    "malloc.h": "c"
+    "malloc.h": "c",
+    "string.h": "c",
+    "syn-write.h": "c"
   }
 }

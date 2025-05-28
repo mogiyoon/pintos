@@ -82,8 +82,9 @@ filesys_open (const char *name) {
 	struct dir *dir = dir_open_root ();
 	struct inode *inode = NULL;
 
-	if (dir != NULL)
+	if (dir != NULL) {
 		dir_lookup (dir, name, &inode);
+	}
 	dir_close (dir);
 
 	struct file* tmp_file = file_open (inode);

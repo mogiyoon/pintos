@@ -456,9 +456,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
-	enum intr_level old_level = intr_enable();
 	file = filesys_open (token_list[0]);
-	intr_set_level(old_level);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", token_list[0]);
 		exit(-1);
