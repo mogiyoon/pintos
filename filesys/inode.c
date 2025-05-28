@@ -191,7 +191,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */
+		// 파일 끝까지 남은 바이트
 		off_t inode_left = inode_length (inode) - offset;
+		//현재 섹터 끝까지 남은 바이트
 		int sector_left = DISK_SECTOR_SIZE - sector_ofs;
 		int min_left = inode_left < sector_left ? inode_left : sector_left;
 

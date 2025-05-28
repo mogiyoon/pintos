@@ -1,6 +1,9 @@
 {
     "files.associations": {
         "*.embeddedhtml": "html",
-        "thread.h": "c"
+        "thread.h": "c",
+        "timer.h": "c",
+        "stdint.h": "c",
+        "synch.h": "c"
     }
 }

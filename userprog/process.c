@@ -26,6 +26,9 @@ static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+int process_add_file(struct file *f);
+struct file *process_get_file(int fd);
+int process_close_file(int fd);
 
 /* General process initializer for initd and other process. */
 static void
@@ -49,6 +52,8 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+	char *save_ptr;
+	strtok_r(file_name, " ", &save_ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -176,14 +181,25 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	// char *ptr, *arg;
+	// int argc = 0;
+	// char *argv[64];
+
+	// for(arg = strtok_r(file_name, " ", &ptr); arg != NULL; arg = strtok_r(NULL, " ", &ptr))
+	// 	argv[argc++] = arg;
+
 	/* And then load the binary */
 	success = load (file_name, &_if);
+
+	// argument_to_stack(argv, argc, &_if);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
 
+
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -204,6 +220,9 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	for (int i = 0 ; i<200000000; i++){
+
+	}
 	return -1;
 }
 
@@ -215,8 +234,14 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	for(int fd = 0; fd < curr->fd_idx; fd++)
+	close(fd);
 
-	process_cleanup ();
+	file_close(curr->runn_file);
+	palloc_free_multiple(curr->fdt, FDT_PAGES);
+	process_cleanup();
+	sema_up(&curr->wait_sema);
+	sema_down(&curr -> exit_sema);
 }
 
 /* Free the current process's resources. */
@@ -328,6 +353,13 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	char *token, *save_ptr;
+	char *argv[128];
+	int argc = 0;
+
+	for(token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+		argv[argc++] = token;
+	}
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -417,6 +449,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
+	argument_to_stack(if_, argc, &argv);
 	success = true;
 
 done:
@@ -424,6 +457,32 @@ done:
 	file_close (file);
 	return success;
 }
+
+void argument_to_stack(struct intr_frame *if_, int argc, char ** argv){
+    uintptr_t addrlist[128];
+    for(int j = argc - 1; j >= 0; j--){
+        if_ -> rsp -= strlen(argv[j]) + 1;
+        memcpy(if_->rsp, argv[j], strlen(argv[j]) + 1);
+        addrlist[j] = (char *)if_->rsp;
+    }
+    /*dcggfsdfghsdhgdghfdg*/
+    uintptr_t padding = if_->rsp % 8;
+    if_->rsp -= padding;
+    memset((char *)if_->rsp, 0, padding);
+    argv[argc] = 0;
+    addrlist[argc] = NULL;
+    for(int j = argc; j>= 0; j--){
+        if_ -> rsp -= sizeof(char *);
+        memcpy(if_->rsp, &addrlist[j], sizeof(char *));
+    }
+    /* %rsi에 argv[0]의 주소, %rsi에 argc값 저장*/
+    if_ -> R.rdi = argc;
+    if_ -> R.rsi = if_->rsp;
+    if_->rsp -= sizeof(void *);
+    memset((void *)if_->rsp, 0, sizeof(void *));
+}
+
+
 
 
 /* Checks whether PHDR describes a valid, loadable segment in
@@ -549,6 +608,51 @@ setup_stack (struct intr_frame *if_) {
 			palloc_free_page (kpage);
 	}
 	return success;
+}
+
+int
+process_add_file(struct file *f){
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fdt;
+
+	// if(cur->fd_idx >= FDCOUNT_LIMIT)
+	// return NULL;
+
+	// fdt[cur->fd_idx++] = f;
+	// return cur->fd_idx - 1;
+
+	while ((cur->fd_idx < FDCOUNT_LIMIT) && fdt[cur->fd_idx])
+	{
+		cur -> fd_idx++;
+	}
+
+	if (cur -> fd_idx >= FDCOUNT_LIMIT)
+	return -1;
+
+	fdt[cur->fd_idx] = f;
+
+	return cur->fd_idx;
+	
+}
+
+struct file *process_get_file(int fd){
+	struct thread *cur = thread_current();
+
+	if(fd < 0 ||fd >= FDCOUNT_LIMIT)
+	return NULL;
+
+	return cur->fdt[fd];
+}
+
+int
+process_close_file(int fd){
+	struct thread *cur = thread_current();
+
+	if(fd < 0 ||fd >= FDCOUNT_LIMIT)
+	return;
+	
+	cur->fdt[fd] = NULL;
+	return 0;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
