@@ -346,9 +346,7 @@ thread_exit (void) {
 	struct thread* cur = thread_current();
 	enum intr_level old_level = intr_disable ();
 	cur->self_status->thread = NULL;
-	// printf("wait sema up B %d tid: %d cur is same\n", cur->self_status->wait_sema.value, cur->tid);
 	sema_up(&cur->self_status->wait_sema);
-	// printf("wait sema up A %d tid: %d cur is same\n", cur->self_status->wait_sema.value, cur->tid);
 #ifdef USERPROG
 	process_exit ();
 #endif

@@ -83,9 +83,7 @@ process_create_initd (const char *file_name) {
 	}
 	
 	intr_set_level(old_level);
-	// printf("load sema down B %d tid %d cur: %d\n", tmp_child_status->load_sema.value, tmp_child_status->tid, thread_current()->tid);
 	sema_down(&tmp_child_status->load_sema);
-	// printf("load sema down A %d tid %d cur: %d\n", tmp_child_status->load_sema.value, tmp_child_status->tid, thread_current()->tid);
 
 	return tid;
 }
@@ -115,8 +113,6 @@ struct th_w_if {
 
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	// printf("parent: %s\n", thread_current()->name);
-	// printf("child: %s\n", name);
 	enum intr_level old_level = intr_disable();
 	struct th_w_if tmp_twi;
 	tmp_twi.the_thread = thread_current();
@@ -144,9 +140,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	}
 	
 	intr_set_level(old_level);
-	// printf("fork sema down B %d tid: %d cur: %d\n", tmp_child_status->fork_sema.value, tmp_child_status->tid, thread_current()->tid);
 	sema_down(&tmp_child_status->fork_sema);
-	// printf("fork sema down A %d tid: %d cur: %d\n", tmp_child_status->fork_sema.value, tmp_child_status->tid, thread_current()->tid);
 
 	/* Clone current thread to new thread.*/
 	return tmp_child_status->tid;
@@ -255,18 +249,14 @@ __do_fork (void *aux) {
 	/* Finally, switch to the newly created process. */
 	if (succ) {
 		if_.R.rax = 0;
-		// printf("fork sema up B %d tid: %d cur is same\n", thread_current()->self_status->fork_sema.value, thread_current()->tid);
 		sema_up(&thread_current()->self_status->fork_sema);
-		// printf("fork sema up A %d tid: %d cur is same\n", thread_current()->self_status->fork_sema.value, thread_current()->tid);
 		do_iret (&if_);
 		intr_set_level(old_level);
 		NOT_REACHED();
 	}
 error:
 	thread_current()->self_status->tid = TID_ERROR; //
-	// printf("fork sema up B %d tid: %d cur is same\n", thread_current()->self_status->fork_sema.value, thread_current()->tid);
 	sema_up(&thread_current()->self_status->fork_sema);
-	// printf("fork sema up A %d tid: %d cur is same\n", thread_current()->self_status->fork_sema.value, thread_current()->tid);
 	intr_set_level(old_level);
 	thread_exit ();
 }
@@ -345,9 +335,7 @@ process_wait (tid_t child_tid UNUSED) {
 
 		intr_set_level(old_level);
 		if (tmp_child_status->thread != NULL) {
-			// printf("wait sema down B %d tid: %d cur: %d\n", tmp_child_status->wait_sema.value, tmp_child_status->tid, thread_current()->tid);
 			sema_down(&tmp_child_status->wait_sema);
-			// printf("wait sema down A %d tid: %d cur: %d\n", tmp_child_status->wait_sema.value, tmp_child_status->tid, thread_current()->tid);
 		} 
 
 		int return_value = tmp_child_status->exit_status;
@@ -624,9 +612,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 done:
 	/* We arrive here whether the load is successful or not. */
-	// printf("load sema up B %d tid: %d cur is same\n", thread_current()->self_status->load_sema.value, thread_current()->tid);
 	sema_up(&thread_current()->self_status->load_sema);
-	// printf("load sema up A %d tid: %d cur is same\n", thread_current()->self_status->load_sema.value, thread_current()->tid);
 	file_close(file);
 	return success;
 }
