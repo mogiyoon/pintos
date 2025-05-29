@@ -346,9 +346,9 @@ thread_exit (void) {
 	struct thread* cur = thread_current();
 	enum intr_level old_level = intr_disable ();
 	cur->self_status->thread = NULL;
-	if (!list_empty(&cur->sema_wait.waiters)) {
-		sema_up(&cur->sema_wait);
-	}
+	// printf("wait sema up B %d tid: %d cur is same\n", cur->self_status->wait_sema.value, cur->tid);
+	sema_up(&cur->self_status->wait_sema);
+	// printf("wait sema up A %d tid: %d cur is same\n", cur->self_status->wait_sema.value, cur->tid);
 #ifdef USERPROG
 	process_exit ();
 #endif
@@ -533,6 +533,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&t->child_status_tags);
 	sema_init(&t->sema_fork, 0);
 	sema_init(&t->sema_wait, 0);
+	sema_init(&t->sema_load, 0);
 }
 
 struct status_tag*
@@ -544,6 +545,10 @@ make_child_status (tid_t child_tid) {
 
 	child_status->tid = child_tid;
 	child_status->exit_status = -1;
+	sema_init(&child_status->load_sema, 0);
+	sema_init(&child_status->fork_sema, 0);
+	sema_init(&child_status->wait_sema, 0);
+
 	return child_status;
 }
 

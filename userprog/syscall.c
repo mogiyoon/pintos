@@ -89,9 +89,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t arg6 = f->R.r9;
 	
 	uint64_t result = 0;
-	// printf("sys call = %s\n", call_name[arg0]);
+	// printf("\nsys call = %s\n", call_name[arg0]);
 	// printf("sys cur name: %s\n", thread_current()->name);
-	// printf("sys cur pid: %d\n", thread_current()->tid);
+	// printf("sys cur pid: %d\n\n", thread_current()->tid);
 	// printf ("system wow call!\n");
 
 	switch (arg0)

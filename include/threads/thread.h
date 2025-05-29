@@ -95,6 +95,9 @@ struct status_tag {
 	int exit_status;
 	struct thread* thread;
 	struct list_elem tag_elem;
+	struct semaphore load_sema;
+	struct semaphore fork_sema;
+	struct semaphore wait_sema;
 };
 
 struct thread {
@@ -120,6 +123,9 @@ struct thread {
 
 	/* Use for wait */
 	struct semaphore sema_wait;
+
+	/* Use for load */
+	struct semaphore sema_load;
 
 	/* Use for fork */
 	struct semaphore sema_fork;
