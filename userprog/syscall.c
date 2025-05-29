@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include <string.h>
 #include "kernel/stdio.h"
+#include "threads/synch.h"
 #include "threads/interrupt.h"
 #include "threads/init.h"
 #include "threads/thread.h"
@@ -89,6 +90,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	
 	uint64_t result = 0;
 	// printf("sys call = %s\n", call_name[arg0]);
+	// printf("sys cur name: %s\n", thread_current()->name);
+	// printf("sys cur pid: %d\n", thread_current()->tid);
 	// printf ("system wow call!\n");
 
 	switch (arg0)
@@ -150,8 +153,8 @@ void halt (void) {
 void exit (int status) {
 	struct thread *curr = thread_current();
 	if (curr != NULL) {
-		curr->exit_status = status;
-		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
+		curr->self_status->exit_status = status;
+		printf("%s: exit(%d)\n", curr->name, curr->self_status->exit_status);
 		thread_exit();
 	}
 }
@@ -162,7 +165,7 @@ pid_t fork (const struct intr_frame* thread_frame) {
 }
 
 int exec (const char *file) {
-	if (ptr_error(file, KADDR)) {
+	if (ptr_error(file, UADDR)) {
 		exit(-1);
 	}
 
@@ -176,14 +179,11 @@ int exec (const char *file) {
 }
 
 int wait (pid_t child_pid) {
-	if (child_pid >= CHILD_MAX) {
-		exit(-1);
-	}
 	return process_wait(child_pid);
 }
 
 bool create (const char *file, unsigned initial_size) {
-	if (ptr_error(file, KADDR)) {
+	if (ptr_error(file, UADDR)) {
 		exit(-1);
 	}
 	if (strlen(file) == 0) {
@@ -204,7 +204,7 @@ bool create (const char *file, unsigned initial_size) {
 }
 
 bool remove (const char *file) {
-	if (ptr_error(file, KADDR)) {
+	if (ptr_error(file, UADDR)) {
 		exit(-1);
 	}
 
@@ -213,20 +213,25 @@ bool remove (const char *file) {
 }
 
 int open (const char *file) {
-	if (ptr_error(file, KADDR)) {
+	if (ptr_error(file, UADDR)) {
 		exit(-1);
 	}
-
+	
 	struct file* new_file = filesys_open(file);
-
+	
 	struct thread* curr = thread_current();
 	int fd_num;
 
+	if (curr->next_fd >= FD_MAX) {
+		file_close(new_file);
+		return -1;
+	}
+
 	if (new_file != NULL) {
-		while (curr->file_dt[curr->next_fd] != NULL) {
+		while (curr->next_fd < FD_MAX && curr->file_dt[curr->next_fd] != NULL) {
 			curr->next_fd++;
 		}
-		if (curr->file_dt[curr->next_fd] == NULL) {
+		if (curr->next_fd < FD_MAX && curr->file_dt[curr->next_fd] == NULL) {
 			curr->file_dt[curr->next_fd] = new_file;
 			fd_num = curr->next_fd;
 			curr->next_fd++;
@@ -246,7 +251,7 @@ int filesize (int fd) {
 }
 
 int read (int fd, void *buffer, unsigned length) {
-	if (ptr_error(buffer, KADDR)) {
+	if (ptr_error(buffer, UADDR)) {
 		exit(-1);
 	}
 
@@ -269,7 +274,7 @@ int read (int fd, void *buffer, unsigned length) {
 }
 
 int write (int fd, const void *buffer, unsigned length) {
-	if (ptr_error(buffer, KADDR)) {
+	if (ptr_error(buffer, UADDR)) {
 		exit(-1);
 	}
 
@@ -303,7 +308,7 @@ void seek (int fd, unsigned position) {
 
 unsigned tell (int fd) {
 	struct file* tmp_file = thread_current()->file_dt[fd];
-	if (ptr_error(tmp_file, KADDR)) {
+	if (ptr_error(tmp_file, UADDR)) {
 		exit(-1);
 	}
 
@@ -329,19 +334,24 @@ void close (int fd) {
 }
 
 static bool ptr_error (char* input_ptr, void* aux) {
-	if (input_ptr == NULL || pml4_get_page(thread_current()->pml4, input_ptr) == NULL) {
-		return true;
-	} else {
-		//address is kernel area
-		if ((enum waddr)aux == UADDR) {
-			if (!is_user_vaddr(input_ptr)) {
-				return false;
-			}
-		} else if ((enum waddr)aux == KADDR) {
-			if (!is_kernel_vaddr(input_ptr)) {
-				return false;
-			}
-		}
+	if (input_ptr == NULL) {
 		return true;
 	}
+	//address is kernel area
+	if ((enum waddr)aux == UADDR) {
+		if (!is_user_vaddr(input_ptr)) {
+			return true;
+		}
+		if (pml4_get_page(thread_current()->pml4, input_ptr) == NULL) {
+			return true;
+		}
+	}
+	
+	if ((enum waddr)aux == KADDR) {
+		if (!is_kernel_vaddr(input_ptr)) {
+			return true;
+		}
+	}
+
+	return false;
 }

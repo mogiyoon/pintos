@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -102,6 +103,7 @@ inode_open (disk_sector_t sector) {
 
 	/* Initialize. */
 	list_push_front (&open_inodes, &inode->elem);
+	// lock_init(&inode->inode_lock);
 	inode->sector = sector;
 	inode->open_cnt = 1;
 	inode->deny_write_cnt = 0;
@@ -279,8 +281,11 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	void
 inode_deny_write (struct inode *inode) 
 {
+	// lock_acquire(&inode->inode_lock);
 	inode->deny_write_cnt++;
 	ASSERT (inode->deny_write_cnt <= inode->open_cnt);
+	// printf("deny inode: %d\n",inode_get_deny(inode));
+	// lock_release(&inode->inode_lock);
 }
 
 /* Re-enables writes to INODE.
@@ -288,9 +293,12 @@ inode_deny_write (struct inode *inode)
  * inode_deny_write() on the inode, before closing the inode. */
 void
 inode_allow_write (struct inode *inode) {
+	// lock_acquire(&inode->inode_lock);
 	ASSERT (inode->deny_write_cnt > 0);
 	ASSERT (inode->deny_write_cnt <= inode->open_cnt);
 	inode->deny_write_cnt--;
+	// printf("allow inode: %d\n",inode_get_deny(inode));
+	// lock_release(&inode->inode_lock);
 }
 
 /* Returns the length, in bytes, of INODE's data. */

@@ -89,6 +89,14 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
+
+struct status_tag {
+	tid_t tid;
+	int exit_status;
+	struct thread* thread;
+	struct list_elem tag_elem;
+};
+
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
@@ -119,13 +127,11 @@ struct thread {
 	/* Parent thread */
 	struct thread* parent_thread;
 
-	/* Child thread */
-	struct list child_list;
-	struct list_elem sibling;
-	int child_status[CHILD_MAX];
+	/* Self status */
+	struct status_tag* self_status;
 
-	/* Exit status */
-	int exit_status;
+	/* Child thread */
+	struct list child_status_tags;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

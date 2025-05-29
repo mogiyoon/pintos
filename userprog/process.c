@@ -85,7 +85,6 @@ struct th_w_if {
 
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	// printf("fork\n");
 	// printf("parent: %s\n", thread_current()->name);
 	// printf("child: %s\n", name);
 	enum intr_level old_level = intr_disable();
@@ -93,18 +92,21 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	tmp_twi.the_thread = thread_current();
 	tmp_twi.the_if = if_;
 	tid_t child_tid = thread_create (name, PRI_DEFAULT, __do_fork, &tmp_twi);
+	if (child_tid == TID_ERROR) {
+		return TID_ERROR;
+	}
 
-	struct thread* temp_children;
+	struct status_tag* tmp_child_status;
 	struct list_elem* fork_elem;
 
-	if (!list_empty(&thread_current()->child_list)) {
-		fork_elem = list_front(&thread_current()->child_list);
-		temp_children = list_entry(fork_elem, struct thread, sibling);
-		while (temp_children->tid != child_tid)
+	if (!list_empty(&thread_current()->child_status_tags)) {
+		fork_elem = list_front(&thread_current()->child_status_tags);
+		tmp_child_status = list_entry(fork_elem, struct status_tag, tag_elem);
+		while (tmp_child_status->tid != child_tid)
 		{
-			if (fork_elem->next != list_end(&thread_current()->child_list)) {
+			if (fork_elem->next != list_end(&thread_current()->child_status_tags)) {
 				fork_elem = fork_elem->next;
-				temp_children = list_entry(fork_elem, struct thread, sibling);
+				tmp_child_status = list_entry(fork_elem, struct status_tag, tag_elem);
 			} else {
 				return -1;
 			}
@@ -112,10 +114,10 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	}
 	
 	intr_set_level(old_level);
-	sema_down(&temp_children->sema_fork);
+	sema_down(&tmp_child_status->thread->sema_fork);
 
 	/* Clone current thread to new thread.*/
-	return child_tid;
+	return tmp_child_status->tid;
 }
 
 #ifndef VM
@@ -210,6 +212,9 @@ __do_fork (void *aux) {
 	for (int i = 0; i < FD_MAX; i++) {
 		if (parent->file_dt[i] != NULL) {
 			current->file_dt[i] = file_duplicate(parent->file_dt[i]);
+			if (current->file_dt[i] == NULL) {
+				goto error;
+			}
 		}
 	}
 
@@ -224,6 +229,9 @@ __do_fork (void *aux) {
 		NOT_REACHED();
 	}
 error:
+	thread_current()->self_status->tid = TID_ERROR; //
+	sema_up(&thread_current()->sema_fork);
+	intr_set_level(old_level);
 	thread_exit ();
 }
 
@@ -282,30 +290,38 @@ int
 process_wait (tid_t child_tid UNUSED) {
 	struct thread* curr = thread_current();
 
-	struct thread* temp_children;
-	struct list_elem* sibling_elem;
+	struct status_tag* tmp_child_status;
+	struct list_elem* child_elem;
 	
-	if (!list_empty(&curr->child_list)) {
+	if (!list_empty(&curr->child_status_tags)) {
 		enum intr_level old_level = intr_disable();
-		sibling_elem = list_front(&curr->child_list);
-		temp_children = list_entry(sibling_elem, struct thread, sibling);
-		while (temp_children->tid != child_tid)
+		child_elem = list_front(&curr->child_status_tags);
+		tmp_child_status = list_entry(child_elem, struct status_tag, tag_elem);
+		while (tmp_child_status->tid != child_tid)
 		{
-			if (sibling_elem->next != list_end(&curr->child_list)) {
-				sibling_elem = sibling_elem->next;
-				temp_children = list_entry(sibling_elem, struct thread, sibling);
+			if (child_elem->next != list_end(&curr->child_status_tags)) {
+				child_elem = child_elem->next;
+				tmp_child_status = list_entry(child_elem, struct status_tag, tag_elem);
 			} else {
 				break;
 			}
 		}
 
 		intr_set_level(old_level);
-		sema_down(&temp_children->sema_wait);
-	} 
+		if (tmp_child_status->thread != NULL) {
+			sema_down(&tmp_child_status->thread->sema_wait);
+		} 
 
-	int return_value = curr->child_status[child_tid];
-	curr->child_status[child_tid] = -1;
-	return return_value;
+		int return_value = tmp_child_status->exit_status;
+
+		list_remove(&tmp_child_status->tag_elem);
+		free(tmp_child_status);
+		
+		return return_value;
+	} else {
+		return -1;
+	}
+
 }
 
 /* Exit the process. This function is called by thread_exit (). */

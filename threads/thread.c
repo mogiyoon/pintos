@@ -8,6 +8,7 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
@@ -65,6 +66,7 @@ static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
+static struct status_tag* make_child_status (tid_t child_tid);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
@@ -80,6 +82,7 @@ bool donate_priority_comparer(struct list_elem* a, struct list_elem* b, void *au
  * somewhere in the middle, this locates the curent thread. */
 #define running_thread() ((struct thread *) (pg_round_down (rrsp ())))
 
+#define THREAD_PAGE 1
 
 // Global descriptor table for the thread_start.
 // Because the gdt will be setup after the thread_init, we should
@@ -194,7 +197,7 @@ thread_create (const char *name, int priority,
 	ASSERT (function != NULL);
 
 	/* Allocate thread. */
-	t = palloc_get_multiple (PAL_ZERO, 2);
+	t = palloc_get_multiple (PAL_ZERO, THREAD_PAGE);
 	if (t == NULL)
 		return TID_ERROR;
 
@@ -205,7 +208,15 @@ thread_create (const char *name, int priority,
 	//ADD parent & children
 	if (thread_current() != NULL && name != "idle") {
 		t->parent_thread = thread_current();
-		list_push_back(&thread_current()->child_list, &t->sibling);
+		struct status_tag* t_status = make_child_status(t->tid);
+		if (t_status == NULL) {
+			palloc_free_multiple (t, THREAD_PAGE);
+			return TID_ERROR;
+		}
+
+		t_status->thread = t;
+		t->self_status = t_status;
+		list_push_back(&thread_current()->child_status_tags, &t_status->tag_elem);
 	}
 
 	/* Call the kernel_thread if it scheduled.
@@ -333,10 +344,8 @@ void
 thread_exit (void) {
 	ASSERT (!intr_context ());
 	struct thread* cur = thread_current();
-	// printf("debug\n");
-	// printf("cur name: %s\n", thread_current()->name);
-	list_remove(&cur->sibling);
 	enum intr_level old_level = intr_disable ();
+	cur->self_status->thread = NULL;
 	if (!list_empty(&cur->sema_wait.waiters)) {
 		sema_up(&cur->sema_wait);
 	}
@@ -345,7 +354,6 @@ thread_exit (void) {
 #endif
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
-	cur->parent_thread->child_status[cur->tid] = cur->exit_status;
 	do_schedule (THREAD_DYING);
 	intr_set_level(old_level);
 	msg("end");
@@ -521,14 +529,22 @@ init_thread (struct thread *t, const char *name, int priority) {
 	//init file descriptor table
 	t->next_fd = 2;
 
-	for (int i = 0; i < sizeof(t->child_status)/sizeof(t->child_status[0]); i++) {
-		t->child_status[i] = -1;
-	}
-
 	//init child
-	list_init(&t->child_list);
+	list_init(&t->child_status_tags);
 	sema_init(&t->sema_fork, 0);
 	sema_init(&t->sema_wait, 0);
+}
+
+struct status_tag*
+make_child_status (tid_t child_tid) {
+	struct status_tag* child_status = calloc(1, sizeof(struct status_tag));
+	if (child_status == NULL) {
+		return NULL;
+	}
+
+	child_status->tid = child_tid;
+	child_status->exit_status = -1;
+	return child_status;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -652,7 +668,7 @@ do_schedule(int status) {
 	while (!list_empty (&destruction_req)) {
 		struct thread *victim =
 			list_entry (list_pop_front (&destruction_req), struct thread, elem);
-		palloc_free_page(victim);
+		palloc_free_multiple(victim, THREAD_PAGE);
 	}
 	thread_current ()->status = status;
 	schedule ();
