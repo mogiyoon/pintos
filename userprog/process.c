@@ -83,7 +83,6 @@ process_create_initd (const char *file_name) {
 	}
 	
 	intr_set_level(old_level);
-	// printf("cur th: %s load sema down\n", thread_current()->name);
 	sema_down(&tmp_child_status->load_sema);
 
 	return tid;
@@ -335,6 +334,10 @@ process_wait (tid_t child_tid UNUSED) {
 		}
 
 		intr_set_level(old_level);
+		if (tmp_child_status->tid != child_tid) {
+			return -1;
+		}
+
 		if (tmp_child_status->thread != NULL) {
 			sema_down(&tmp_child_status->wait_sema);
 		} 
@@ -582,22 +585,22 @@ load (const char *file_name, struct intr_frame *if_) {
 	pointer_addr[argc + 1] = NULL;
 	char** argv = NULL;
 	
-	for (int i = 0; i < argc; i++) {
+	for (int index = 0; index < argc; index++) {
 		stack_pointer -= 1;
 		*stack_pointer = '\0';
-		stack_pointer -= strlen(token_list[i]);
-		memcpy(stack_pointer, token_list[i], strlen(token_list[i]));
-		pointer_addr[i+1] = stack_pointer;
+		stack_pointer -= strlen(token_list[index]);
+		memcpy(stack_pointer, token_list[index], strlen(token_list[index]));
+		pointer_addr[index+1] = stack_pointer;
 	}
 	int padding_size = (int)(stack_pointer)%8;
 	if (padding_size != 0) {
 		stack_pointer -= padding_size;
 		memset(stack_pointer, 0, padding_size);
 	}
-	for (int i = 0; i < argc + 2; i++) {
+	for (int index = 0; index < argc + 2; index++) {
 		stack_pointer -= sizeof(char*);
-		*((char**)stack_pointer) = pointer_addr[argc + 1 - i];
-		if (i == argc) {
+		*((char**)stack_pointer) = pointer_addr[argc + 1 - index];
+		if (index == argc) {
 			argv = (char**)stack_pointer;
 		}
 	}
@@ -612,6 +615,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	success = true;
 	
 done:
+	// printf("load end\n");
 	/* We arrive here whether the load is successful or not. */
 	sema_up(&thread_current()->self_status->load_sema);
 	file_close(file);
