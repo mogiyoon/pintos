@@ -8,6 +8,8 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 
+struct lock inode_lock;
+
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
@@ -39,6 +41,7 @@ static struct list open_inodes;
 void
 inode_init (void) {
 	list_init (&open_inodes);
+	lock_init (&inode_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -168,8 +171,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
 
-	// printf("inode: %p \n", inode);
-	// printf("size: %d \n", size);
+	lock_acquire(&inode_lock);
+ 
 	while (size > 0) {
 		/* Disk sector to read, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
@@ -212,6 +215,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	}
 	free (bounce);
 	// printf("byte read: %d\n", bytes_read);
+	lock_release(&inode_lock);
 
 	return bytes_read;
 }

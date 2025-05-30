@@ -337,7 +337,7 @@ static bool ptr_error (char* input_ptr, void* aux) {
 	if (input_ptr == NULL) {
 		return true;
 	}
-	//address is kernel area
+	//address is user area
 	if ((enum waddr)aux == UADDR) {
 		if (!is_user_vaddr(input_ptr)) {
 			return true;

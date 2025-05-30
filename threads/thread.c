@@ -204,7 +204,7 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
-	
+
 	//ADD parent & children
 	if (thread_current() != NULL && name != "idle") {
 		t->parent_thread = thread_current();
@@ -529,9 +529,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	//init child
 	list_init(&t->child_status_tags);
-	sema_init(&t->sema_fork, 0);
-	sema_init(&t->sema_wait, 0);
-	sema_init(&t->sema_load, 0);
 }
 
 struct status_tag*
@@ -546,7 +543,6 @@ make_child_status (tid_t child_tid) {
 	sema_init(&child_status->load_sema, 0);
 	sema_init(&child_status->fork_sema, 0);
 	sema_init(&child_status->wait_sema, 0);
-
 	return child_status;
 }
 

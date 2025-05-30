@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/interrupt.h"
 
 /* A directory. */
 struct dir {
@@ -95,6 +96,7 @@ lookup (const struct dir *dir, const char *name,
 					return true;
 				}
 			}
+
 	return false;
 }
 

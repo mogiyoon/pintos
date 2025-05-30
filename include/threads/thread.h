@@ -121,15 +121,6 @@ struct thread {
 	int next_fd;
 	struct file* running_file;
 
-	/* Use for wait */
-	struct semaphore sema_wait;
-
-	/* Use for load */
-	struct semaphore sema_load;
-
-	/* Use for fork */
-	struct semaphore sema_fork;
-
 	/* Parent thread */
 	struct thread* parent_thread;
 

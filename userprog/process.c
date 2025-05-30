@@ -83,12 +83,13 @@ process_create_initd (const char *file_name) {
 	}
 	
 	intr_set_level(old_level);
+	// printf("cur th: %s load sema down\n", thread_current()->name);
 	sema_down(&tmp_child_status->load_sema);
 
 	return tid;
 }
 
-/* A thread function that launches first user process. */
+/* A thread function that launches first 	user process. */
 static void
 initd (void *f_name) {
 #ifdef VM
@@ -292,7 +293,7 @@ process_exec (void *f_name) {
 	char* running_file_name = strtok_r (file_name, " ", &save_ptr);
 	struct file* running_file = filesys_open(running_file_name);
 	thread_current()->running_file = running_file;
-	file_deny_write(running_file);
+	file_deny_write(running_file); 
 	// printf("exec running file inode: %p\n", running_file->inode);
 
 	palloc_free_page (file_name);
@@ -501,8 +502,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	file = filesys_open (token_list[0]);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", token_list[0]);
+		sema_up(&thread_current()->self_status->load_sema);
 		exit(-1);
-		goto done;
 	}
 
 	/* Read and verify executable header. */
