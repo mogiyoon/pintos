@@ -131,8 +131,14 @@ thread_init (void) {
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid ();
 
-	
+	list_init(&initial_thread -> child_list);
+	sema_init(&initial_thread -> fork_sema, 0);
+	sema_init(&initial_thread -> exit_sema, 0);
+	sema_init(&initial_thread -> wait_sema, 0);
 }
+
+	
+
 
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
@@ -210,7 +216,7 @@ thread_create (const char *name, int priority,
 	tid = t->tid = allocate_tid ();
 
 	#ifdef USERPROG
-	t->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	t->fdt = palloc_get_multiple(PAL_USER, FDT_PAGES);
 	if(t->fdt == NULL){
 		return TID_ERROR;
 	}
@@ -223,7 +229,7 @@ thread_create (const char *name, int priority,
 	t->fdt[2] = STDERR;
 	
 
-	// list_push_back(&thread_current()->child_list, &t->child_elem);
+	list_push_back(&thread_current()->child_list, &t->child_elem);
 
 	#endif
 	/* Call the kernel_thread if it scheduled.

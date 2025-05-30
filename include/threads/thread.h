@@ -97,11 +97,15 @@ struct thread {
 	int priority;                       /* Priority. */
 	int original_priority;								/* Priority Donate. */ //ADD
 	int64_t sleep_time; 								/* Sleep_time */ //ADD
+	
+	struct lock *wait_lock;
+	struct list donations;
+	struct list_elem donation_elem;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 	
-
+	
 	
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -163,6 +167,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+bool priority_comparer(struct list_elem* a, struct list_elem* b, void *aux);
 
 void do_iret (struct intr_frame *tf);
 

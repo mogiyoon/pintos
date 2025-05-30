@@ -28,6 +28,8 @@ int write (int fd, const void *buffer, unsigned size);
 int wait(pid_t pid);
 void close(int fd);
 void check_address(void *addr);
+int tell(int fd);
+bool remove (const char *file);
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -76,20 +78,21 @@ syscall_handler (struct intr_frame *f) {
 		exit(f->R.rdi);
 		break;
 	case SYS_FORK:
-		f->R.rax = fork(f->R.rdi);
+		// f->R.rax = fork(f->R.rdi);
+		f->R.rax = process_fork(f->R.rdi, f);
 		break;
 	case SYS_EXEC:
 		f->R.rax = exec(f->R.rdi);
 		break;
-	// case SYS_WAIT:
-	// 	f->R.rax = process_wait(f->R.rdi);
-	// 	break;
+	case SYS_WAIT:
+		f->R.rax = process_wait(f->R.rdi);
+		break;
 	case SYS_CREATE:
 		f->R.rax = create(f->R.rdi, f->R.rsi);
 		break;
-	// case SYS_REMOVE:
-	// 	f->R.rax = remove(f->R.rdi);
-	// 	break;
+	case SYS_REMOVE:
+		f->R.rax = remove(f->R.rdi);
+		break;
 	case SYS_OPEN:
 		f->R.rax = open(f->R.rdi);
 		break;
@@ -102,12 +105,12 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_WRITE:
 		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
-	// case SYS_SEEK:
-	// 	seek(f->R.rdi, f->R.rsi);
-	// 	break;
-	// case SYS_TELL:
-	// 	f->R.rax = tell(f->R.rdi);
-	// 	break;
+	case SYS_SEEK:
+		seek(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_TELL:
+		f->R.rax = tell(f->R.rdi);
+		break;
 	case SYS_CLOSE:
 		close(f->R.rdi);
 		break;
@@ -162,7 +165,9 @@ bool create (const char *file, unsigned initial_size){
 }
 
 bool remove (const char *file){
+	check_address(file);
 
+	return filesys_remove(file);
 }
 
 int open (const char *file){
@@ -246,6 +251,25 @@ int write (int fd, const void *buffer, unsigned size){
 }
 int wait(pid_t tid){
 	return process_wait(tid);
+}
+void
+seek(int fd, unsigned position){
+
+	struct file *file = process_get_file(fd);
+
+	if(file == NULL || (file >= STDIN && file <= STDERR))
+	return ;
+
+	file_seek(file, position);
+}
+int
+tell(int fd){
+	struct file *file = process_get_file(fd);
+
+	if(file == NULL || (file >= STDIN && file <= STDERR))
+	return ;
+
+	file_tell(file);
 }
 void
 close(int fd){
