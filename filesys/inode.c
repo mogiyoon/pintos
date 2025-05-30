@@ -7,8 +7,7 @@
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
-
-struct lock inode_lock;
+ 
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -41,7 +40,6 @@ static struct list open_inodes;
 void
 inode_init (void) {
 	list_init (&open_inodes);
-	lock_init (&inode_lock);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -170,8 +168,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	uint8_t *buffer = buffer_;
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
-
-	lock_acquire(&inode_lock);
  
 	while (size > 0) {
 		/* Disk sector to read, starting byte offset within sector. */
@@ -186,7 +182,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 		/* Number of bytes to actually copy out of this sector. */
 		int chunk_size = size < min_left ? size : min_left;
 		if (chunk_size <= 0) {
-			// printf("break1\n");
 			break;
 		}
 
@@ -199,7 +194,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 			if (bounce == NULL) {
 				bounce = malloc (DISK_SECTOR_SIZE);
 				if (bounce == NULL) {
-					// printf("break2\n");
 					break;
 				}
 			}
@@ -208,14 +202,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 		}
 
 		/* Advance. */
-		// printf("break3\n");
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_read += chunk_size;
 	}
 	free (bounce);
-	// printf("byte read: %d\n", bytes_read);
-	lock_release(&inode_lock);
 
 	return bytes_read;
 }
