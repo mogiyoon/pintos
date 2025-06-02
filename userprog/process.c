@@ -497,6 +497,10 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	t->runn_file = file;
+	file_deny_write(file);
+
+
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
@@ -577,7 +581,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	// file_close (file);
 	return success;
 }
 
@@ -655,6 +659,67 @@ validate_segment (const struct Phdr *phdr, struct file *file) {
 
 	/* It's okay. */
 	return true;
+}
+
+int
+process_add_file(struct file *f){
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fdt;
+
+	// if(cur->fd_idx >= FDCOUNT_LIMIT)
+	// return NULL;
+
+	// fdt[cur->fd_idx++] = f;
+	// return cur->fd_idx - 1;
+
+	while ((cur->fd_idx < FDCOUNT_LIMIT) && fdt[cur->fd_idx])
+	{
+		cur -> fd_idx++;
+	}
+
+	if (cur -> fd_idx >= FDCOUNT_LIMIT)
+	return -1;
+
+	fdt[cur->fd_idx] = f;
+
+	return cur->fd_idx;
+	
+}
+
+struct file *process_get_file(int fd){
+	struct thread *cur = thread_current();
+
+	if(fd < 0 ||fd >= FDCOUNT_LIMIT)
+	return NULL;
+
+	return cur->fdt[fd];
+}
+
+int
+process_close_file(int fd){
+	struct thread *cur = thread_current();
+
+	if(fd < 0 ||fd >= FDCOUNT_LIMIT)
+	return -1;
+	
+	cur->fdt[fd] = NULL;
+	return 0;
+}
+
+struct thread 
+*get_child_process(int pid) 
+{
+    struct thread *curr = thread_current();
+    struct thread *t;
+
+    for (struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)) {
+        t = list_entry(e, struct thread, child_elem);
+
+        if (pid == t->tid)
+            return t;
+    }
+
+    return NULL;
 }
 
 #ifndef VM
@@ -738,66 +803,7 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 
-int
-process_add_file(struct file *f){
-	struct thread *cur = thread_current();
-	struct file **fdt = cur->fdt;
 
-	// if(cur->fd_idx >= FDCOUNT_LIMIT)
-	// return NULL;
-
-	// fdt[cur->fd_idx++] = f;
-	// return cur->fd_idx - 1;
-
-	while ((cur->fd_idx < FDCOUNT_LIMIT) && fdt[cur->fd_idx])
-	{
-		cur -> fd_idx++;
-	}
-
-	if (cur -> fd_idx >= FDCOUNT_LIMIT)
-	return -1;
-
-	fdt[cur->fd_idx] = f;
-
-	return cur->fd_idx;
-	
-}
-
-struct file *process_get_file(int fd){
-	struct thread *cur = thread_current();
-
-	if(fd < 0 ||fd >= FDCOUNT_LIMIT)
-	return NULL;
-
-	return cur->fdt[fd];
-}
-
-int
-process_close_file(int fd){
-	struct thread *cur = thread_current();
-
-	if(fd < 0 ||fd >= FDCOUNT_LIMIT)
-	return -1;
-	
-	cur->fdt[fd] = NULL;
-	return 0;
-}
-
-struct thread 
-*get_child_process(int pid) 
-{
-    struct thread *curr = thread_current();
-    struct thread *t;
-
-    for (struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)) {
-        t = list_entry(e, struct thread, child_elem);
-
-        if (pid == t->tid)
-            return t;
-    }
-
-    return NULL;
-}
 
 /* Adds a mapping from user virtual address UPAGE to kernel
  * virtual address KPAGE to the page table.

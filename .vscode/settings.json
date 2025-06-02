@@ -4,6 +4,7 @@
         "thread.h": "c",
         "timer.h": "c",
         "stdint.h": "c",
-        "synch.h": "c"
+        "synch.h": "c",
+        "process.h": "c"
     }
 }
