@@ -254,11 +254,6 @@ process_exec (void *f_name) {
 	char *argv[MAX_ARGC];	// 128 byte
 	int argc = 0;
 
-	/*if ((uint64_t) f_name < 0x800000000000) {
-		PANIC("f_name is in user space!");
-	}*/	
-
-
 	/* 문자열을 파싱하여 argv 포인터 배열로 저장한다 */
 	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; 
 		token = strtok_r(NULL, " ", &save_ptr)){
@@ -271,6 +266,7 @@ process_exec (void *f_name) {
 		palloc_free_page (file_name);
 		return -1;
 	}
+
 	/* Project 2 : args */
 	argument_stack(argv, argc, &_if);
 	
@@ -363,11 +359,14 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	
 	for (int i = 0; i < curr->fd_idx; i++) {
-	if (curr->fdt[i] != NULL) {
-		close(i); }
+		if (curr->fdt[i] != NULL) {
+			close(i); }
 	}
+	
+	file_close(curr->running_f);
+	
 	curr->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
 
 	process_cleanup();
@@ -626,13 +625,13 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	 	 /* Push data into stack */
+	/* Push data into stack */
 
 	success = true;
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	// file_close (file);
 	return success;
 }
 

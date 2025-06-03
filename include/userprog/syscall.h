@@ -8,7 +8,7 @@ void syscall_init (void);
 typedef int pid_t;
 #define PID_ERROR ((pid_t)-1)
 
-struct lock filesys_lock;
+extern struct lock filesys_lock;
 
 void check_address (void *addr);
 

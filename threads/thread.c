@@ -375,11 +375,13 @@ thread_set_priority (int new_priority) {
 	intr_set_level(old_level);*/
   
 	/* Project 1 : Priority */
+	struct thread *curr = thread_current();
+	enum intr_level old_level = intr_disable();
 	thread_current()->priority = new_priority;
-  thread_current()->original_priority = new_priority;
-  refresh_priority();
+	thread_current()->original_priority = new_priority;
+	refresh_priority();
 	test_max_priority();
-  
+
 	intr_set_level(old_level);
 }
 

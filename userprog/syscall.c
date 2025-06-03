@@ -129,7 +129,6 @@ void exit (int status){
 	thread_exit();
 }
 
-/* Dummy Code */
 pid_t fork (const char *thread_name){
 	check_address(thread_name);
 	return process_fork(thread_name, NULL);
@@ -159,19 +158,31 @@ int wait (pid_t pid){
 
 bool create (const char *file, unsigned initial_size){
 	check_address(file);
-	return filesys_create(file, initial_size);
+
+	lock_acquire(&filesys_lock);
+	bool success = filesys_create(file, initial_size);
+	lock_release(&filesys_lock);
+
+	return success;
 }
 
 bool remove (const char *file){
 	check_address(file);
-	return filesys_remove(file);
+
+	lock_acquire(&filesys_lock);
+	bool success = filesys_remove(file);
+	lock_release(&filesys_lock);
+
+	return success;
 }
 
 int open (const char *file){
 	check_address(file);
 
+	// lock_acquire(&filesys_lock);
 	struct file *f = filesys_open(file);
 	if (f == NULL)
+		// lock_release(&filesys_lock);
 		return -1;
 	
 	int fd = get_next_fd(f);	// 함수 구현
@@ -179,6 +190,7 @@ int open (const char *file){
 	if (fd == -1)
 		file_close(f);
 	
+	// lock_release(&filesys_lock);
 	return fd;
 }
 
@@ -210,7 +222,9 @@ int read (int fd, void *buffer, unsigned length){
 	struct file *file = process_get_file(fd);
 	if (file == NULL)
 		return -1;
-	
+
+	//printf("acquire lock: tid=%d\n", thread_current()->tid);
+
 	lock_acquire(&filesys_lock);
 	off_t bytes_read = file_read(file, buffer, length);
 	lock_release(&filesys_lock);
