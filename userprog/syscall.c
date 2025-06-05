@@ -343,7 +343,7 @@ static bool ptr_error (char* input_ptr, void* aux) {
 			return true;
 		}
 		if (pml4_get_page(thread_current()->pml4, input_ptr) == NULL) {
-			return true;
+			return false;
 		}
 	}
 	
