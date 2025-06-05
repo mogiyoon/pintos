@@ -1,6 +1,8 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
+#include <stdio.h>
 #include "threads/malloc.h"
+#include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
@@ -53,8 +55,34 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
+		struct page* new_page = malloc(sizeof(struct page));
+		if (new_page == NULL) {
+			goto err;
+		}
+
+		bool (*init_func)(struct page *, enum vm_type, void *);
+
+		switch (VM_TYPE(type))
+		{
+		case VM_ANON:
+			init_func = anon_initializer;
+			break;
+		case VM_FILE:
+			init_func = file_backed_initializer;
+			break;
+		
+		default:
+			goto err;
+		}
+		uninit_new(new_page, upage, init, type, aux, init_func);
+		new_page->writable = writable;
 
 		/* TODO: Insert the page into the spt. */
+		if (!spt_insert_page(spt, new_page)) {
+			//TODO: Release page
+			goto err;
+		}
+		return true;
 	}
 err:
 	return false;
@@ -63,10 +91,15 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
+	struct page tmp_page;
 	/* TODO: Fill this function. */
-
-	return page;
+	tmp_page.va = va;
+	struct hash_elem* tmp_hash = hash_find(&spt->sup_page_hash, &tmp_page.hash_elem);
+	if (tmp_hash != NULL) {
+		return hash_entry(tmp_hash, struct page, hash_elem);
+	} else {
+		return NULL;
+	}
 }
 
 /* Insert PAGE into spt with validation. */
@@ -75,7 +108,13 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
+	if (spt_find_page (spt, page->va) != NULL) {
+		return succ;
+	}
 
+	if(hash_insert(&spt->sup_page_hash, &page->hash_elem) == NULL) {
+		succ = true;
+	}
 	return succ;
 }
 
@@ -110,8 +149,15 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
+	struct frame *frame = malloc(sizeof(struct frame));
 	/* TODO: Fill this function. */
+	frame->kva = palloc_get_multiple(PAL_ZERO, 1);
+	frame->page = NULL;
+	if (frame == NULL || frame->kva == NULL) {
+		PANIC("TODO");
+		// ADD evict func
+		//frame NULL과 kva NULL 분리하기
+	}
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -134,8 +180,25 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
+	uint64_t* cur_pml4 = thread_current()->pml4;
+	
+	addr = pg_round_down(addr);
+
 	/* TODO: Validate the fault */
+	if (pml4_get_page(cur_pml4, addr) != NULL) {
+		return false;
+	}
+
+	//TODO: check this if
+	// if (write) {
+	// 	return false;
+	// }
+
 	/* TODO: Your code goes here */
+	page = spt_find_page(spt, addr);
+	if (page == NULL) {
+		return false;
+	}
 
 	return vm_do_claim_page (page);
 }
@@ -153,6 +216,7 @@ bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
+	page = spt_find_page(&thread_current()->spt, va);
 
 	return vm_do_claim_page (page);
 }
@@ -167,6 +231,14 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	uint64_t* cur_pml4 = thread_current()->pml4;
+	if (pml4_get_page(cur_pml4, page->va) != NULL) {
+		return false;
+	} else {
+		if (!pml4_set_page(cur_pml4, page->va, frame->kva, page->writable)) {
+			return false; 
+		}
+	}
 
 	return swap_in (page, frame->kva);
 }
@@ -174,6 +246,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	hash_init(&spt->sup_page_hash, va_to_hashvalue, hash_value_comparer, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -187,4 +260,27 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+uint64_t
+va_to_hashvalue(struct hash_elem *e, void* aux) {
+	struct page* tmp_page = hash_entry(e, struct page, hash_elem);
+	return hash_bytes(&tmp_page->va, sizeof(void *));
+}
+
+bool
+hash_value_comparer(struct hash_elem* a, struct hash_elem* b, void *aux) {
+	uint64_t pva_a; 
+	uint64_t pva_b;
+
+	struct page* tmp_a = hash_entry(a, struct page, hash_elem);
+	struct page* tmp_b = hash_entry(b, struct page, hash_elem);
+
+	pva_a = tmp_a->va;
+	pva_b = tmp_b->va;
+
+if (pva_a < pva_b)
+    return true;
+else
+    return false;
 }

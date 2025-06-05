@@ -19,6 +19,7 @@ void debug_backtrace (void);
 
 #endif
 
+#define VM
 
 
 /* This is outside the header guard so that debug.h may be

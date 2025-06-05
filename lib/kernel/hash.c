@@ -5,9 +5,11 @@
 
    See hash.h for basic information. */
 
+#include <stdio.h>
 #include "hash.h"
 #include "../debug.h"
 #include "threads/malloc.h"
+#include "vm/vm.h"
 
 #define list_elem_to_hash_elem(LIST_ELEM)                       \
 	list_entry(LIST_ELEM, struct hash_elem, list_elem)
@@ -92,7 +94,6 @@ struct hash_elem *
 hash_insert (struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket (h, new);
 	struct hash_elem *old = find_elem (h, bucket, new);
-
 	if (old == NULL)
 		insert_elem (h, bucket, new);
 
@@ -288,7 +289,6 @@ find_bucket (struct hash *h, struct hash_elem *e) {
 static struct hash_elem *
 find_elem (struct hash *h, struct list *bucket, struct hash_elem *e) {
 	struct list_elem *i;
-
 	for (i = list_begin (bucket); i != list_end (bucket); i = list_next (i)) {
 		struct hash_elem *hi = list_elem_to_hash_elem (i);
 		if (!h->less (hi, e, h->aux) && !h->less (e, hi, h->aux))
@@ -391,4 +391,3 @@ remove_elem (struct hash *h, struct hash_elem *e) {
 	h->elem_cnt--;
 	list_remove (&e->list_elem);
 }
-

@@ -22,6 +22,11 @@
     "*.inc": "c",
     "malloc.h": "c",
     "string.h": "c",
-    "syn-write.h": "c"
+    "syn-write.h": "c",
+    "string": "c",
+    "variant": "c",
+    "intrinsic.h": "c",
+    "inttypes.h": "c",
+    "hash.h": "c"
   }
 }
