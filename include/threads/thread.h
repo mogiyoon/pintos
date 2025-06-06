@@ -5,10 +5,10 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"		/* Project 2 : system call */
 #ifdef VM
 #include "vm/vm.h"
 #endif
-
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -27,6 +27,10 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Project 2 : system call - file descriptor */
+#define FDT_PAGES     3
+#define FDCOUNT_LIMIT FDT_PAGES * (1 << 9)  // 3 * 512 = 1536
 
 /* A kernel thread or user process.
  *
@@ -95,6 +99,21 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
+		/* Project 2 : system call */
+	int exit_status;
+	int fd_idx;							/* File Descriptor index */
+
+	struct file **fdt;					/* File Descriptor Table */
+	struct file *running_f;				/* Running file */
+
+	struct intr_frame parent_if;		/* Parent process interrupt frame */
+	struct list child_list;				/* Save child threads */
+	struct list_elem child_elem;		/* Parent's child list elem*/
+
+	struct semaphore fork_sema;			/* 부모의 fork직후 자식의 복제 완료 기다리기 */
+	struct semaphore wait_sema;			/* 부모의 wait에서 자식 종료될때 까지 기다리기 */	
+	struct semaphore exit_sema;			/* 자식의 exit에서 부모가 수거할때까지 기다리기 */
+
 #ifdef USERPROG
 	/* Owned by  userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -153,6 +172,7 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
+/* Project 1 */
 bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void donate_priority (void);
 void remove_with_lock (struct lock *lock);

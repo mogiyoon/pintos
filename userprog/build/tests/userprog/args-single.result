@@ -1,0 +1,14 @@
+FAIL
+Kernel panic in run: PANIC at ../../threads/mmu.c:206 in pml4_activate(): assertion `is_kernel_vaddr(pml4 ? pml4 : base_pml4)' failed.
+Call stack: 0x8004218e01 0x800420d1aa 0x800421cc00 0x8004207b6e 0x8004207a01 0x8004207365 0x800420a791 0x8004207c92 0x8004206b6c 0x8004206070
+Translation of call stack:
+0x0000008004218e01: debug_panic (lib/kernel/debug.c:32)
+0x000000800420d1aa: pml4_activate (threads/mmu.c:206)
+0x000000800421cc00: process_activate (userprog/process.c:257)
+0x0000008004207b6e: schedule (threads/thread.c:610)
+0x0000008004207a01: do_schedule (threads/thread.c:589)
+0x0000008004207365: thread_yield (threads/thread.c:318)
+0x000000800420a791: lock_release (threads/synch.c:267)
+0x0000008004207c92: allocate_tid (threads/thread.c:639)
+0x0000008004206b6c: thread_init (threads/thread.c:117)
+0x0000008004206070: main (threads/init.c:83)
