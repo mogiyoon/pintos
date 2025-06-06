@@ -29,7 +29,7 @@ bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
-
+	page->now_type = VM_ANON;
 	struct anon_page *anon_page = &page->anon;
 }
 
@@ -49,4 +49,9 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+}
+
+void
+anon_copy_page () {
+
 }

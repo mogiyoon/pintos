@@ -27,6 +27,9 @@
     "variant": "c",
     "intrinsic.h": "c",
     "inttypes.h": "c",
-    "hash.h": "c"
+    "hash.h": "c",
+    "uninit.h": "c",
+    "vm.h": "c",
+    "disk.h": "c"
   }
 }

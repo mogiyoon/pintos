@@ -8,6 +8,8 @@
  * function.
  * */
 
+#include <string.h>
+#include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/uninit.h"
 
@@ -33,6 +35,7 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 		.operations = &uninit_ops,
 		.va = va,
 		.frame = NULL, /* no frame for now */
+		.now_type = VM_UNINIT,
 		.uninit = (struct uninit_page) {
 			.init = init,
 			.type = type,
@@ -65,4 +68,51 @@ uninit_destroy (struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	switch (uninit->type)
+	{
+	case VM_ANON:
+		/* code */
+		break;
+	case VM_FILE:
+		break;
+	
+	default:
+		break;
+	}
+}
+
+bool
+uninit_copy_page (struct page *page, void *va, vm_initializer *init,
+		enum vm_type type, void *aux,
+		bool (*initializer)(struct page *, enum vm_type, void *)) {
+	ASSERT (page != NULL);
+	struct file_aux_info* new_aux;
+
+	switch (type)
+	{
+
+	case VM_ANON:
+		break;
+	case VM_FILE:
+		new_aux = malloc(sizeof(struct file_aux_info));
+		memcpy(new_aux, aux, sizeof(struct file_aux_info));
+		aux = new_aux;
+		break;
+	
+	default:
+		break;
+	}
+
+	*page = (struct page) {
+		.operations = &uninit_ops,
+		.va = va,
+		.frame = NULL, /* no frame for now */
+		.now_type = VM_UNINIT,
+		.uninit = (struct uninit_page) {
+			.init = init,
+			.type = type,
+			.aux = aux,
+			.page_initializer = initializer,
+		}
+	};
 }

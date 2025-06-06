@@ -98,7 +98,6 @@ hash_insert (struct hash *h, struct hash_elem *new) {
 		insert_elem (h, bucket, new);
 
 	rehash (h);
-
 	return old;
 }
 
@@ -391,3 +390,27 @@ remove_elem (struct hash *h, struct hash_elem *e) {
 	h->elem_cnt--;
 	list_remove (&e->list_elem);
 }
+
+bool
+hash_copy (struct hash* dst, struct hash* src, hash_copy_func *copy_func) {
+	struct hash_iterator tmp_iterator;
+	struct hash_elem* old_elem;
+	struct hash_elem* new_elem;
+	
+	hash_first(&tmp_iterator, src);
+	int total_elem_cnt = hash_size(src);
+
+	while (hash_next (&tmp_iterator))
+	{
+		old_elem = tmp_iterator.elem;
+		new_elem = copy_func (old_elem);
+		if (new_elem == NULL) {
+			//TODO: FREE
+			return false;
+		}
+		hash_insert(dst, new_elem);
+	}
+
+	return true;
+}
+

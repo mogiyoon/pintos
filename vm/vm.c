@@ -1,6 +1,7 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
 #include <stdio.h>
+#include <string.h>
 #include "threads/malloc.h"
 #include "threads/mmu.h"
 #include "vm/vm.h"
@@ -47,6 +48,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
 
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
+	upage = pg_round_down(upage);
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
@@ -82,6 +84,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			//TODO: Release page
 			goto err;
 		}
+
 		return true;
 	}
 err:
@@ -149,7 +152,7 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = malloc(sizeof(struct frame));
+	struct frame *frame = calloc(1, sizeof(struct frame));
 	/* TODO: Fill this function. */
 	frame->kva = palloc_get_multiple(PAL_ZERO, 1);
 	frame->page = NULL;
@@ -217,7 +220,6 @@ vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
 	page = spt_find_page(&thread_current()->spt, va);
-
 	return vm_do_claim_page (page);
 }
 
@@ -239,7 +241,6 @@ vm_do_claim_page (struct page *page) {
 			return false; 
 		}
 	}
-
 	return swap_in (page, frame->kva);
 }
 
@@ -247,19 +248,20 @@ vm_do_claim_page (struct page *page) {
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	hash_init(&spt->sup_page_hash, va_to_hashvalue, hash_value_comparer, NULL);
+	spt->thread = thread_current();
 }
 
 /* Copy supplemental page table from src to dst */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+		return hash_copy(&dst->sup_page_hash, &src->sup_page_hash, copy_page);
 }
 
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
+	// hash_clear(spt->sup_page_hash, )
 }
 
 uint64_t
@@ -284,3 +286,61 @@ if (pva_a < pva_b)
 else
     return false;
 }
+
+struct hash_elem*
+copy_page (struct hash_elem* src_elem) {
+	struct page* old_page = hash_entry(src_elem, struct page, hash_elem);
+	struct page* new_page = malloc(sizeof(struct page));
+	//TODO: determine true or false
+
+	switch (old_page->now_type)
+	{
+		case VM_UNINIT:
+			vm_copy_uninit_page (old_page, new_page);
+			break;
+		case VM_ANON:
+			vm_copy_claim_page(old_page, new_page);
+			break;
+		case VM_FILE:
+			vm_copy_claim_page(old_page, new_page);
+			break;
+	
+		default:
+			break;
+	}
+
+	return &new_page->hash_elem;
+}
+
+bool
+vm_copy_uninit_page (struct page* old_page, struct page* new_page) {
+	return uninit_copy_page(new_page, old_page->va, old_page->uninit.init, old_page->uninit.type, old_page->uninit.aux, old_page->uninit.page_initializer);
+}
+
+bool
+vm_copy_claim_page (struct page* old_page, struct page* new_page) {
+	new_page->operations = old_page->operations;
+	new_page->va = old_page->va;
+	new_page->now_type = old_page->now_type;
+	new_page->writable = old_page->writable;
+
+	//to obtain kva
+	struct frame *frame = vm_get_frame ();
+
+	/* Set links */
+	frame->page = new_page;
+	new_page->frame = frame;
+
+	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	uint64_t* cur_pml4 = thread_current()->pml4;
+	if (pml4_get_page(cur_pml4, new_page->va) != NULL) {
+		return false;
+	} else {
+		if (!pml4_set_page(cur_pml4, new_page->va, frame->kva, new_page->writable)) {
+			return false; 
+		}
+	}
+	memcpy(new_page->frame->kva, old_page->frame->kva, PGSIZE);
+	return true;
+}
+

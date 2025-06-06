@@ -42,18 +42,19 @@ struct thread;
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
+	struct hash_elem hash_elem;
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
+	enum vm_type now_type;
 
 	/* Your implementation */
-	struct hash_elem hash_elem;
 	bool writable;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
-		struct uninit_page uninit;
+		struct uninit_page uninit;  
 		struct anon_page anon;
 		struct file_page file;
 #ifdef EFILESYS
@@ -89,6 +90,7 @@ struct page_operations {
  * All designs up to you for this. */
 struct supplemental_page_table {
 	struct hash sup_page_hash;
+	struct thread* thread;
 };
 
 #include "threads/thread.h"
@@ -115,5 +117,8 @@ enum vm_type page_get_type (struct page *page);
 
 uint64_t va_to_hashvalue(struct hash_elem *e, void* aux);
 bool hash_value_comparer(struct hash_elem* a, struct hash_elem* b, void *aux);
+struct hash_elem* copy_page (struct hash_elem* src_elem);
+bool vm_copy_uninit_page (struct page* old_page, struct page* new_page);
+bool vm_copy_claim_page (struct page* old_page, struct page* new_page);
 
 #endif  /* VM_VM_H */

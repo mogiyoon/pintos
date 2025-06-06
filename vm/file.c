@@ -24,6 +24,7 @@ bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &file_ops;
+	page->now_type = VM_FILE;
 
 	struct file_page *file_page = &page->file;
 }
@@ -55,4 +56,9 @@ do_mmap (void *addr, size_t length, int writable,
 /* Do the munmap */
 void
 do_munmap (void *addr) {
+}
+
+void
+file_copy_page () {
+
 }

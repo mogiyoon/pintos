@@ -54,6 +54,9 @@ typedef bool hash_less_func (const struct hash_elem *a,
  * data AUX. */
 typedef void hash_action_func (struct hash_elem *e, void *aux);
 
+/* Performs copy */
+typedef struct hash_elem* hash_copy_func (struct hash_elem* src);
+
 /* Hash table. */
 struct hash {
 	size_t elem_cnt;            /* Number of elements in table. */
@@ -96,5 +99,8 @@ bool hash_empty (struct hash *);
 uint64_t hash_bytes (const void *, size_t);
 uint64_t hash_string (const char *);
 uint64_t hash_int (int);
+
+/* Copy hash table */
+bool hash_copy (struct hash* dst, struct hash* src, hash_copy_func *);
 
 #endif /* lib/kernel/hash.h */

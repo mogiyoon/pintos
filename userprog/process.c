@@ -138,7 +138,6 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 			}
 		}
 	}
-	
 	intr_set_level(old_level);
 	sema_down(&tmp_child_status->fork_sema);
 
@@ -221,8 +220,9 @@ __do_fork (void *aux) {
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
-	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
+	if (!supplemental_page_table_copy (&current->spt, &parent->spt)) {
 		goto error;
+	}
 #else
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		goto error;
@@ -255,6 +255,7 @@ __do_fork (void *aux) {
 		NOT_REACHED();
 	}
 error:
+	printf("do fork error\n");
 	thread_current()->self_status->tid = TID_ERROR; //
 	sema_up(&thread_current()->self_status->fork_sema);
 	intr_set_level(old_level);
@@ -771,18 +772,12 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-struct file_aux_info {
-	struct file* file;
-	off_t ofs;
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
-};
-
 static bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+
 	uint8_t* upage = page->va;
 	uint8_t* kpage = page->frame->kva;
 	
@@ -839,7 +834,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		struct file_aux_info* aux_info = malloc(sizeof(struct file_aux_info));
+		struct file_aux_info* aux_info = calloc(1, sizeof(struct file_aux_info));
+		if (aux_info == NULL) {
+			return false;
+		}
 		aux_info->file = file;
 		aux_info->ofs = ofs;
 		aux_info->read_bytes = page_read_bytes;
