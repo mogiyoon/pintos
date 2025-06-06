@@ -50,9 +50,6 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
-	
-    char *ptr;
-    strtok_r(file_name, " ", &ptr);
 
 	/* Project 2 : for Test Case */
 	char *ptr;
@@ -218,21 +215,7 @@ __do_fork (void *aux) {
 	}
 
 	sema_up(&current->fork_sema);
-
-	if (parent->fd_idx >= FDCOUNT_LIMIT)
-		goto error;
-
-	current->fd_idx = parent->fd_idx;
-	for(int fd = 3; fd < parent->fd_idx; fd++){
-		if(parent->fdt[fd] == NULL)
-			// succ = false;
-			// goto error;
-			continue;
-		current->fdt[fd] = file_duplicate(parent->fdt[fd]);
-	}
-
-	sema_up(&current->fork_sema);
-
+	
 	process_init ();
 
 	/* Finally, switch to the newly created process. */
@@ -269,10 +252,6 @@ process_exec (void *f_name) {
 	char *token, *save_ptr;
 	char *argv[MAX_ARGC];	// 128 byte
 	int argc = 0;
-
-	/*if ((uint64_t) f_name < 0x800000000000) {
-		PANIC("f_name is in user space!");
-	}*/	
 
 	/* 문자열을 파싱하여 argv 포인터 배열로 저장한다 */
 	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; 
@@ -374,16 +353,6 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	
-	for (int i = 0; i < curr->fd_idx; i++) {
-		if (curr->fdt[i] != NULL) {
-			close(i); }
-	}
-	
-	file_close(curr->running_f);
-	
-	curr->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
-
 	for (int fd = 0; fd < curr->fd_idx; fd++) {
 		close(fd);
 	}
@@ -573,9 +542,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		printf ("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
-
-	t->running_f = file;
-	file_deny_write(file);
 
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;

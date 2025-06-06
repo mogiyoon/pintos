@@ -269,10 +269,6 @@ thread_unblock (struct thread *t) {
 	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	
 	t->status = THREAD_READY;
-  
-	// list_push_back (&ready_list, &t->elem);
-	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
-	t->status = THREAD_READY;
 
 	intr_set_level (old_level);
 }
@@ -347,32 +343,6 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	/* Project 1 : alarm
-	struct thread *curr = thread_current();
-	enum intr_level old_level;
-
-	curr->original_priority = new_priority;
-
-	old_level = intr_disable();
-
-	if(list_empty(&curr->donations) || new_priority > curr->priority)
-		curr->priority = new_priority;
-
-	// thread_current ()->priority = new_priority;
-	struct thread *curr = thread_current();
-	enum intr_level old_level;
-
-	curr->priority = new_priority;
-	old_level = intr_disable();
-
-	if(!list_empty(&ready_list)){
-		struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
-		if(curr->priority < front->priority){
-			thread_yield();
-		}
-	}
-	intr_set_level(old_level);*/
-  
 	/* Project 1 : Priority */
 	enum intr_level old_level = intr_disable();
 	thread_current()->priority = new_priority;
