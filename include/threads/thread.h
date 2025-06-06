@@ -115,7 +115,7 @@ struct thread {
 	struct semaphore exit_sema;			/* 자식의 exit에서 부모가 수거할때까지 기다리기 */
 
 #ifdef USERPROG
-	/* Owned by  userprog/process.c. */
+	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
 #endif
 #ifdef VM
@@ -127,15 +127,10 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 
-	/* Project 1 : alarm */
+	/* Project 1 modifications */
 	struct list_elem sleep_elem;
-	int64_t wakeup_tick;
+	int64_t wakeup_time;
 
-	/* Project 1 : priority-donate*/
-	int original_priority;
-	struct lock *wait_lock;
-	struct list donations;
-	struct list_elem donation_elem;
 };
 
 /* If false (default), use round-robin scheduler.
@@ -172,7 +167,6 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
-/* Project 1 */
 bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void donate_priority (void);
 void remove_with_lock (struct lock *lock);

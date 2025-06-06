@@ -18,6 +18,7 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -45,13 +46,17 @@ process_create_initd (const char *file_name) {
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
-	fn_copy = palloc_get_page (0);
+	fn_copy = palloc_get_page (0);		// 초기화되지 않은 페이지를 할당 받는다.
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 	
     char *ptr;
     strtok_r(file_name, " ", &ptr);
+
+	/* Project 2 : for Test Case */
+	char *ptr;
+	strtok_r(file_name, " ", &ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -214,6 +219,20 @@ __do_fork (void *aux) {
 
 	sema_up(&current->fork_sema);
 
+	if (parent->fd_idx >= FDCOUNT_LIMIT)
+		goto error;
+
+	current->fd_idx = parent->fd_idx;
+	for(int fd = 3; fd < parent->fd_idx; fd++){
+		if(parent->fdt[fd] == NULL)
+			// succ = false;
+			// goto error;
+			continue;
+		current->fdt[fd] = file_duplicate(parent->fdt[fd]);
+	}
+
+	sema_up(&current->fork_sema);
+
 	process_init ();
 
 	/* Finally, switch to the newly created process. */
@@ -355,6 +374,15 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	
+	for (int i = 0; i < curr->fd_idx; i++) {
+		if (curr->fdt[i] != NULL) {
+			close(i); }
+	}
+	
+	file_close(curr->running_f);
+	
+	curr->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
 
 	for (int fd = 0; fd < curr->fd_idx; fd++) {
 		close(fd);
@@ -513,7 +541,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
-	off_t file_ofs;
+	off_t file_ofs;			// 파일 오프셋 : 현재 ELF 실행파일의 읽을 위치 (바이트 단위)
 	bool success = false;
 	int i;
 
@@ -530,7 +558,11 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	t->running_f = file;
+	file_deny_write(file);
+
 	/* Read and verify executable header. */
+	/* ELF magic number (\177ELF)등 으로 유효성 확인 */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -547,6 +579,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
+	/* Parse program header */
 	for (i = 0; i < ehdr.e_phnum; i++) {
 		struct Phdr phdr;
 
@@ -569,6 +602,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			case PT_INTERP:
 			case PT_SHLIB:
 				goto done;
+			/* PT_LOAD type should be loaded onto memory via load_segment() */
 			case PT_LOAD:
 				if (validate_segment (&phdr, file)) {
 					bool writable = (phdr.p_flags & PF_W) != 0;
@@ -598,15 +632,16 @@ load (const char *file_name, struct intr_frame *if_) {
 		}
 	}
 
-	/* Set up stack. */
+	/* Set up stack. Set stack pointer (rsp) */
 	if (!setup_stack (if_))
 		goto done;
 
-	/* Start address. */
+	/* Start address and save in rip register */
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* Push data into stack */
 
 	success = true;
 

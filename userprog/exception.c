@@ -142,6 +142,9 @@ page_fault (struct intr_frame *f) {
 	
 	exit(-1);
 
+	/* Project 2 : system call */
+	exit(-1);
+
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
