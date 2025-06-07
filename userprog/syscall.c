@@ -47,6 +47,9 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap (void *addr);
+
 static bool ptr_error (char* input_ptr);
 
 /* System call.
@@ -142,8 +145,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_DUP2:
 			break;
 		case SYS_MMAP:
+			mmap((void*)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
 			break;
 		case SYS_MUNMAP:
+			munmap((void*)arg1);
 			break;
 		
 		default:
@@ -290,6 +295,11 @@ int write (int fd, const void *buffer, unsigned length) {
 		exit(-1);
 	}
 
+	struct page* get_page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
+	if (get_page != NULL && !(get_page->writable)) {
+		exit(-1);
+	}
+
 	if (fd == 1) {
 		putbuf(buffer, length);
 		return length;
@@ -343,6 +353,16 @@ void close (int fd) {
 	if (thread_current()->next_fd > fd) {
 		thread_current()->next_fd = fd;
 	}
+}
+
+void* mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+
+	do_mmap(addr, length, writable, thread_current()->file_dt[fd], offset);
+}
+
+void munmap (void *addr) {
+
+	do_munmap(addr);
 }
 
 static bool ptr_error (char* input_ptr) {

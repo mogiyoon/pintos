@@ -202,15 +202,19 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	// printf("user: %d\n", user);
 	// printf("rsp : %p\n", now_rsp);
 	// printf("addr: %p\n", addr);
+	// printf("maximum: %p\n", USER_STACK - (1<<20));
 	
 	/* TODO: Validate the fault */
 	if (pml4_get_page(cur_pml4, rdown_addr) != NULL) {
 		return false;
 	}
 	
-	if ((now_rsp > addr) && (addr >= now_rsp - sizeof(void*)) && (addr >= USER_STACK - (1<<20)))
+	if ((USER_STACK >= addr) && (addr >= now_rsp - sizeof(void*)) && (addr >= USER_STACK - (1<<20)))
 	{
 		if (stack_full < 20) {
+			// printf("growth\n");
+			// printf("user stack: %p\n", USER_STACK);
+			// printf("addr: %p\n", rdown_addr);
 			vm_stack_growth(rdown_addr);
 		} else {
 			return false;
