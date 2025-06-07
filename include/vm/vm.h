@@ -50,6 +50,7 @@ struct page {
 
 	/* Your implementation */
 	bool writable;
+	struct thread* owner;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -117,8 +118,10 @@ enum vm_type page_get_type (struct page *page);
 
 uint64_t va_to_hashvalue(struct hash_elem *e, void* aux);
 bool hash_value_comparer(struct hash_elem* a, struct hash_elem* b, void *aux);
+
 struct hash_elem* copy_page (struct hash_elem* src_elem);
 bool vm_copy_uninit_page (struct page* old_page, struct page* new_page);
 bool vm_copy_claim_page (struct page* old_page, struct page* new_page);
 
+void delete_page (struct hash_elem* e, void* aux);
 #endif  /* VM_VM_H */

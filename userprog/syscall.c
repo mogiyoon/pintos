@@ -47,7 +47,7 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 
-static bool ptr_error (char* input_ptr, void* aux);
+static bool ptr_error (char* input_ptr);
 
 /* System call.
  *
@@ -75,7 +75,7 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-char* call_name[] = {"halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "create\0", "remove\0", "open\0", "file size\0", "read\0", "write\0", "seek\0", "tell\0", "close\0"};
+char* call_name[] = {"halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "create\0", "remove\0", "open\0", "file size\0", "read\0", "write\0", "seek\0", "tell\0", "close\0", "dup2\0", "mmap\0", "munmap\0"};
 
 /* The main system call interface */
 void
@@ -87,7 +87,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t arg4 = f->R.r10;
 	uint64_t arg5 = f->R.r8;
 	uint64_t arg6 = f->R.r9;
-	
+	thread_current()->user_rsp = f->rsp;
+
 	uint64_t result = 0;
 	// printf("\nsys call = %s\n", call_name[arg0]);
 	// printf("sys cur name: %s\n", thread_current()->name);
@@ -124,10 +125,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			result = filesize((int)arg1);
 			break;
 		case SYS_READ:
-			result = read((int)arg1, (void*)arg2, (unsigned)arg3);
+			result = read((int)arg1, (char*)arg2, (unsigned)arg3);
 			break;
 		case SYS_WRITE:
-			result = write((int)arg1, (void*)arg2, (unsigned)arg3);
+			result = write((int)arg1, (char*)arg2, (unsigned)arg3);
 			break;
 		case SYS_SEEK:
 			seek((int)arg1, (unsigned)arg2);
@@ -137,6 +138,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_CLOSE:
 			close((int)arg1);
+			break;
+		case SYS_DUP2:
+			break;
+		case SYS_MMAP:
+			break;
+		case SYS_MUNMAP:
 			break;
 		
 		default:
@@ -165,7 +172,7 @@ pid_t fork (const struct intr_frame* thread_frame) {
 }
 
 int exec (const char *file) {
-	if (ptr_error(file, UADDR)) {
+	if (ptr_error(file)) {
 		exit(-1);
 	}
 
@@ -183,7 +190,7 @@ int wait (pid_t child_pid) {
 }
 
 bool create (const char *file, unsigned initial_size) {
-	if (ptr_error(file, UADDR)) {
+	if (ptr_error(file)) {
 		exit(-1);
 	}
 	if (strlen(file) == 0) {
@@ -204,7 +211,7 @@ bool create (const char *file, unsigned initial_size) {
 }
 
 bool remove (const char *file) {
-	if (ptr_error(file, UADDR)) {
+	if (ptr_error(file)) {
 		exit(-1);
 	}
 
@@ -213,7 +220,7 @@ bool remove (const char *file) {
 }
 
 int open (const char *file) {
-	if (ptr_error(file, UADDR)) {
+	if (ptr_error(file)) {
 		exit(-1);
 	}
 	
@@ -251,7 +258,12 @@ int filesize (int fd) {
 }
 
 int read (int fd, void *buffer, unsigned length) {
-	if (ptr_error(buffer, UADDR)) {
+	if (ptr_error(buffer)) {
+		exit(-1);
+	}
+
+	struct page* get_page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
+	if (get_page != NULL && !(get_page->writable)) {
 		exit(-1);
 	}
 
@@ -274,7 +286,7 @@ int read (int fd, void *buffer, unsigned length) {
 }
 
 int write (int fd, const void *buffer, unsigned length) {
-	if (ptr_error(buffer, UADDR)) {
+	if (ptr_error(buffer)) {
 		exit(-1);
 	}
 
@@ -308,7 +320,7 @@ void seek (int fd, unsigned position) {
 
 unsigned tell (int fd) {
 	struct file* tmp_file = thread_current()->file_dt[fd];
-	if (ptr_error(tmp_file, UADDR)) {
+	if (ptr_error(tmp_file)) {
 		exit(-1);
 	}
 
@@ -333,24 +345,13 @@ void close (int fd) {
 	}
 }
 
-static bool ptr_error (char* input_ptr, void* aux) {
+static bool ptr_error (char* input_ptr) {
 	if (input_ptr == NULL) {
 		return true;
 	}
-	//address is user area
-	if ((enum waddr)aux == UADDR) {
-		if (!is_user_vaddr(input_ptr)) {
-			return true;
-		}
-		if (pml4_get_page(thread_current()->pml4, input_ptr) == NULL) {
-			return false;
-		}
-	}
 	
-	if ((enum waddr)aux == KADDR) {
-		if (!is_kernel_vaddr(input_ptr)) {
-			return true;
-		}
+	if (!is_user_vaddr(input_ptr)) {
+		return true;
 	}
 
 	return false;

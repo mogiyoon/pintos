@@ -227,7 +227,6 @@ __do_fork (void *aux) {
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
-	
 	/* TODO: Your code goes here.
 	* TODO: Hint) To duplicate the file object, use `file_duplicate`
 	* TODO:       in include/filesys/file.h. Note that parent should not return
@@ -245,7 +244,6 @@ __do_fork (void *aux) {
 	}
 
 	process_init ();
-	
 	/* Finally, switch to the newly created process. */
 	if (succ) {
 		if_.R.rax = 0;
@@ -255,7 +253,7 @@ __do_fork (void *aux) {
 		NOT_REACHED();
 	}
 error:
-	printf("do fork error\n");
+	// printf("do fork error\n");
 	thread_current()->self_status->tid = TID_ERROR; //
 	sema_up(&thread_current()->self_status->fork_sema);
 	intr_set_level(old_level);
@@ -266,7 +264,6 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
-	// printf("exec\n");
 	char *file_name = f_name;
 	bool success;
 
@@ -481,6 +478,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
+	// printf("load start\n");
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
@@ -777,6 +775,11 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+
+
+	// printf("cur thread: %s\n", thread_current()->name);
+	// printf("lazy load va: %p\n", page->va);
+	// printf("lazy load writable: %d\n", page->writable);
 
 	uint8_t* upage = page->va;
 	uint8_t* kpage = page->frame->kva;

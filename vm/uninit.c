@@ -115,4 +115,5 @@ uninit_copy_page (struct page *page, void *va, vm_initializer *init,
 			.page_initializer = initializer,
 		}
 	};
+	return true;
 }

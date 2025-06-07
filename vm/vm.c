@@ -78,6 +78,9 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		uninit_new(new_page, upage, init, type, aux, init_func);
 		new_page->writable = writable;
+		new_page->owner = thread_current();
+		// printf("vm alloc page va: %p\n", upage);
+		// printf("vm alloc page writable: %d\n", writable);
 
 		/* TODO: Insert the page into the spt. */
 		if (!spt_insert_page(spt, new_page)) {
@@ -168,8 +171,11 @@ vm_get_frame (void) {
 }
 
 /* Growing the stack. */
+static int stack_full = 1;
+
 static void
 vm_stack_growth (void *addr UNUSED) {
+	vm_alloc_page_with_initializer(VM_ANON, addr, true, NULL, NULL);
 }
 
 /* Handle the fault on write_protected page */
@@ -184,22 +190,40 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	uint64_t* cur_pml4 = thread_current()->pml4;
-	
-	addr = pg_round_down(addr);
+	if (!is_user_vaddr(addr)) {
+		return false;
+	}
+	// printf("try fault cur: %s\n", thread_current()->name);
+	// printf("try fault through \n");
 
+	void* rdown_addr = addr;
+	rdown_addr = pg_round_down(rdown_addr);
+	uint64_t now_rsp = user ? f->rsp : thread_current()->user_rsp;
+	// printf("user: %d\n", user);
+	// printf("rsp : %p\n", now_rsp);
+	// printf("addr: %p\n", addr);
+	
 	/* TODO: Validate the fault */
-	if (pml4_get_page(cur_pml4, addr) != NULL) {
+	if (pml4_get_page(cur_pml4, rdown_addr) != NULL) {
+		return false;
+	}
+	
+	if ((now_rsp > addr) && (addr >= now_rsp - sizeof(void*)) && (addr >= USER_STACK - (1<<20)))
+	{
+		if (stack_full < 20) {
+			vm_stack_growth(rdown_addr);
+		} else {
+			return false;
+		}
+	}
+
+	/* TODO: Your code goes here */
+	page = spt_find_page(spt, rdown_addr);
+	if (page == NULL) {
 		return false;
 	}
 
-	//TODO: check this if
-	// if (write) {
-	// 	return false;
-	// }
-
-	/* TODO: Your code goes here */
-	page = spt_find_page(spt, addr);
-	if (page == NULL) {
+	if (write && !(page->writable)) {
 		return false;
 	}
 
@@ -232,6 +256,9 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 
+	// printf("vm do addr: %p\n", page->va);
+	// printf("vm do writable: %d\n", page->writable);
+
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	uint64_t* cur_pml4 = thread_current()->pml4;
 	if (pml4_get_page(cur_pml4, page->va) != NULL) {
@@ -261,7 +288,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-	// hash_clear(spt->sup_page_hash, )
+	hash_clear(&spt->sup_page_hash, delete_page);
 }
 
 uint64_t
@@ -291,7 +318,7 @@ struct hash_elem*
 copy_page (struct hash_elem* src_elem) {
 	struct page* old_page = hash_entry(src_elem, struct page, hash_elem);
 	struct page* new_page = malloc(sizeof(struct page));
-	//TODO: determine true or false
+	//TODO: determine true or false result of function
 
 	switch (old_page->now_type)
 	{
@@ -308,13 +335,16 @@ copy_page (struct hash_elem* src_elem) {
 		default:
 			break;
 	}
-
 	return &new_page->hash_elem;
 }
 
 bool
 vm_copy_uninit_page (struct page* old_page, struct page* new_page) {
-	return uninit_copy_page(new_page, old_page->va, old_page->uninit.init, old_page->uninit.type, old_page->uninit.aux, old_page->uninit.page_initializer);
+	bool succ = false;
+	succ = uninit_copy_page(new_page, old_page->va, old_page->uninit.init, old_page->uninit.type, old_page->uninit.aux, old_page->uninit.page_initializer);
+	new_page->writable = old_page->writable;
+	new_page->owner = thread_current();
+	return succ;
 }
 
 bool
@@ -323,6 +353,7 @@ vm_copy_claim_page (struct page* old_page, struct page* new_page) {
 	new_page->va = old_page->va;
 	new_page->now_type = old_page->now_type;
 	new_page->writable = old_page->writable;
+	new_page->owner = thread_current();
 
 	//to obtain kva
 	struct frame *frame = vm_get_frame ();
@@ -344,3 +375,11 @@ vm_copy_claim_page (struct page* old_page, struct page* new_page) {
 	return true;
 }
 
+void
+delete_page (struct hash_elem* e, void* aux) {
+	struct page* d_page = hash_entry(e, struct page, hash_elem);
+	//TODO: ADD release aux for each types
+	//TODO: use dealloc and modify each destroy function
+	free(d_page->frame);
+	free(d_page);
+}

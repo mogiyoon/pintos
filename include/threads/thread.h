@@ -136,6 +136,7 @@ struct thread {
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
+	uint64_t user_rsp;
 	struct supplemental_page_table spt;
 #endif
 

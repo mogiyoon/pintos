@@ -30,6 +30,10 @@
     "hash.h": "c",
     "uninit.h": "c",
     "vm.h": "c",
-    "disk.h": "c"
+    "disk.h": "c",
+    "parallel-merge.h": "c",
+    "__config": "c",
+    "istream": "c",
+    "locale": "c"
   }
 }

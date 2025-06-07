@@ -398,7 +398,6 @@ hash_copy (struct hash* dst, struct hash* src, hash_copy_func *copy_func) {
 	struct hash_elem* new_elem;
 	
 	hash_first(&tmp_iterator, src);
-	int total_elem_cnt = hash_size(src);
 
 	while (hash_next (&tmp_iterator))
 	{

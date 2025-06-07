@@ -120,6 +120,7 @@ kill (struct intr_frame *f) {
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
 page_fault (struct intr_frame *f) {
+	// printf("page fault work\n");
 	bool not_present;  /* True: not-present page, false: writing r/o page. */
 	bool write;        /* True: access was write, false: access was read. */
 	bool user;         /* True: access by user, false: access by kernel. */
@@ -151,6 +152,7 @@ page_fault (struct intr_frame *f) {
 	/* Count page faults. */
 	page_fault_cnt++;
 	/* If the fault is true fault, show info and exit. */
+	// printf("handler error\n");
 	exit(-1);
 	printf ("Page fault at %p: %s error %s page in %s context.\n",
 			fault_addr,
