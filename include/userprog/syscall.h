@@ -9,7 +9,12 @@ typedef int pid_t;
 
 struct lock filesys_lock;
 
+#ifndef VM
 void check_address (void *addr);
+#else
+/* Project 3 : VM - anon page */
+struct page *check_address(void *addr);
+#endif
 
 void halt (void);
 void exit (int status);

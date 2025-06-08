@@ -453,12 +453,14 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	t->magic = THREAD_MAGIC;
 	/* Project 2 : system call */
+#ifdef USERPROG
 	t->running_f = NULL;
 	
 	list_init(&t->child_list);
 	sema_init(&t->fork_sema, 0);
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->exit_sema, 0);
+#endif
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

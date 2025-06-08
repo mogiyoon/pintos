@@ -107,16 +107,23 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// printf ("system call!\n");
 	// thread_exit ();
 }
+
+#ifndef VM
 /* Project 2 : system call */
-/* Address validation :
- * - 사용자 포인터가 유효한지 검사하고 유효하지 않다면 프로세스를 종료시킨다
- * - “이 포인터가 사용자 영역이고, 실제로 매핑되어 있나?”를 커널이 확인한다 */
 void
 check_address(void *addr){
 	if(addr == NULL || is_kernel_vaddr(addr) || pml4_get_page(thread_current()->pml4, addr) == NULL){
 		exit(-1);
 	}
 }
+#else
+/* Project 3 : VM - anon page */
+struct page *check_address(void *addr){
+	if(is_kernel_vaddr(addr) || addr == NULL || !spt_find_page(&thread_current()->spt, addr))
+		exit(-1);
+	return spt_find_page(&thread_current()->spt, addr);
+}
+#endif
 
 void halt (void){
 	power_off();

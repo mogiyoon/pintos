@@ -139,21 +139,30 @@ page_fault (struct intr_frame *f) {
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
-	
-	exit(-1);
-
-	/* Project 2 : system call */
-	exit(-1);
 
 #ifdef VM
-	/* For project 3 and later. */
+	/* For project 3 and later.*/
+	if ((!not_present && write) || (fault_addr < 0x400000 || fault_addr >= USER_STACK))
+	{
+		/*printf("page fault exit(-5) 발생! 세부 원인:\n");
+
+		if (!not_present && write)
+			printf("→ 존재하는 페이지에 쓰기 접근 (페이지 보호 위반)\n");
+
+		if (fault_addr < 0x400000)
+			printf("→ 너무 낮은 주소 접근: %p (USER_BASE 미만)\n", fault_addr);
+
+		if (fault_addr >= USER_STACK)
+			printf("→ 스택 한계 초과 접근: %p (USER_STACK = %p)\n", fault_addr, USER_STACK);
+		*/
+		exit(-1);
+	}
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
 #endif
-
 	/* Count page faults. */
 	page_fault_cnt++;
-
+	exit(-1);
 	/* If the fault is true fault, show info and exit. */
 	printf ("Page fault at %p: %s error %s page in %s context.\n",
 			fault_addr,
