@@ -9,13 +9,6 @@ typedef int pid_t;
 
 struct lock filesys_lock;
 
-#ifndef VM
-void check_address (void *addr);
-#else
-/* Project 3 : VM - anon page */
-struct page *check_address(void *addr);
-#endif
-
 void halt (void);
 void exit (int status);
 pid_t fork (const char *thread_name);
@@ -30,4 +23,15 @@ int write (int fd, const void *buffer, unsigned length);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+
+#ifndef VM
+void check_address (void *addr);
+#else
+/* Project 3 : VM - anon page */
+struct page *check_address(void *addr);
+#endif
+
+#include "include/filesys/off_t.h";
+#include "stddef.h";
+void check_valid_buffer(void *buffer, size_t size, bool writable);
 #endif /* userprog/syscall.h */

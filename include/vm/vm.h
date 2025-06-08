@@ -103,6 +103,9 @@ struct supplemental_page_table {
 	struct thread *owner;
 };
 
+/* Project 3 : Stack Growth */
+#define STACK_LIMIT (USER_STACK - (1<<20))
+
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);
 bool supplemental_page_table_copy (struct supplemental_page_table *dst,

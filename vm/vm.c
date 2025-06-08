@@ -162,6 +162,19 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	bool success = false;
+	addr = pg_round_down(addr);
+	struct thread *curr = thread_current();
+
+	while (curr->stack_bottom > addr){
+		curr->stack_bottom -= PGSIZE;
+		if(!vm_alloc_page(VM_ANON | VM_MARKER_0, curr->stack_bottom, true))
+			return;
+		if(!vm_claim_page(curr->stack_bottom))
+			return;
+	}
+	// printf("GROW stack at %p (rounded to %p)\n", addr, pg_round_down(addr));
+
 }
 
 /* Handle the fault on write_protected page */
@@ -178,19 +191,34 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if(addr == NULL || is_kernel_vaddr(addr))
 		return false;
 
+	struct page *page = NULL;
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = spt_find_page(spt, addr);
-
 
 	if(not_present){
+		// 스택 포인터 추출
+		void *rsp;
+		if (user)
+			rsp = f->rsp;
+		else
+			thread_current()->stack_pointer;
+
+		// case 1: PUSH 등으로 rsp보다 8바이트 아래 주소에 접근한 경우 (스택 미리 증가)
+		if(STACK_LIMIT <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK){
+			vm_stack_growth(addr);
+			return true;
+		}
+		// case 2: rsp 이후 주소에 접근한 일반적인 스택 확장 상황
+		else if(STACK_LIMIT <= rsp && rsp <= addr && addr <= USER_STACK){
+			vm_stack_growth(addr);
+			return true;
+		}
 		page = spt_find_page(spt, addr);
-		if(page == NULL)
-			return false;
-		if(write == 1 && page->writable == 0)
+
+		// printf("FAULT addr: %p, rsp: %p, user: %d, write: %d, not_present: %d\n", addr, f->rsp, user, write, not_present);
+		if(!page || (write && !page->writable))
 			return false;
 		return vm_do_claim_page(page);
 	}
-	void *fault_addr = (void *) rcr2();
 	return false;
 }
 
@@ -245,17 +273,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	struct hash_iterator i;
 	struct page *src_page, *dst_page;
 	hash_first(&i, &src->spt_hash);
-
-	/* 의문 1: 페이지 구조체 복사 방식
-	- 원래는 struct page를 malloc으로 만들고 필드 직접 복사하려 했음
-	- 예: dst_page->va = src_page->va 등
-	- 하지만 union 구조와 타입 정보가 섞여 있어 직접 어떻게 복사하지?
-	- 해결: vm_alloc_page_with_initializer()로 새 페이지를 생성하고 claim하는 방식으로 대체*/ 
-
-	/* 의문 2: 메모리 할당과 데이터 복사 방식
-	- 구조체 자체는 malloc 등으로 커널 힙에 할당해야 함 (palloc은 물리 페이지용)
-	- frame은 물리 메모리를 가리키므로 공유 불가 → frame 자체는 복사하지 않음
-	- 대신 부모의 frame->kva 내용을 memcpy로 자식 frame에 복사*/
 
 	while(hash_next(&i)){
 		src_page = hash_entry(hash_cur(&i), struct page, hash_elem);

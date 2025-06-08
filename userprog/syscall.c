@@ -14,8 +14,6 @@
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
 #include "userprog/process.h"
-#include "devices/input.h"
-#include "console.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -58,6 +56,10 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	int sys_number = f->R.rax;
+
+#ifdef VM
+	thread_current()->stack_pointer = f->rsp;
+#endif
 	switch(sys_number){
 		case SYS_HALT :
 			halt();
@@ -104,8 +106,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		default :
 			exit(-1);
 	}
-	// printf ("system call!\n");
-	// thread_exit ();
 }
 
 #ifndef VM
@@ -122,6 +122,18 @@ struct page *check_address(void *addr){
 	if(is_kernel_vaddr(addr) || addr == NULL || !spt_find_page(&thread_current()->spt, addr))
 		exit(-1);
 	return spt_find_page(&thread_current()->spt, addr);
+}
+
+void check_valid_buffer(void *buffer, size_t size, bool writable){
+	for(size_t i = 0; i < size; i +=8){
+		// printf("checking: %p\n", buffer + i);
+		struct page *page = check_address(buffer + i);
+
+		// if (!page) printf("page not found at %p\n", buffer + i);
+
+		if(!page || (writable && !(page->writable)))
+			exit(-1);
+	}
 }
 #endif
 
@@ -199,10 +211,15 @@ int filesize (int fd){
 }
 
 int read (int fd, void *buffer, unsigned length){
-	check_address(buffer);
 
+#ifdef VM
+	check_valid_buffer(buffer, length, true);
+#endif
+	check_address(buffer);
+	
 	// stdin 키보드 입력은 파일이 아니기 때문에 직접 읽어온다
 	if (fd == 0){
+		
 		unsigned char *buff = buffer;
 		for (int i = 0; i < length; i++){
 			buff[i] = input_getc();
@@ -218,16 +235,24 @@ int read (int fd, void *buffer, unsigned length){
 	if (file == NULL)
 		return -1;
 	
+	off_t bytes_read = -1;
+	
 	lock_acquire(&filesys_lock);
-	off_t bytes_read = file_read(file, buffer, length);
+	bytes_read = file_read(file, buffer, length);
 	lock_release(&filesys_lock);
+
+	// printf("read returned: %d (expected %d)\n", fd, length);
 
 	return bytes_read;
 }
 
 int write (int fd, const void *buffer, unsigned length){
-	check_address(buffer);
 
+#ifdef VM
+	check_valid_buffer(buffer, length, true);
+#endif
+	check_address(buffer);
+	
 	// stdin or fd < 0 인 경우 쓸게 없으니 에러 반환
 	if (fd <= 0)
 		return -1;
@@ -241,12 +266,11 @@ int write (int fd, const void *buffer, unsigned length){
 	struct file *file = process_get_file(fd);
 	if (file == NULL)
 		return -1;
-
 	off_t bytes_write = -1;
+
 	lock_acquire(&filesys_lock);
 	bytes_write = file_write(file, buffer, length);
 	lock_release(&filesys_lock);
-
 	return bytes_write;
 }
 
