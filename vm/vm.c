@@ -277,21 +277,36 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	while(hash_next(&i)){
 		src_page = hash_entry(hash_cur(&i), struct page, hash_elem);
 		enum vm_type type = src_page->operations->type;
+		void *upage = src_page->va;
+		bool writable = src_page->writable;
 
 		if(type == VM_UNINIT)
 		{
-			vm_alloc_page_with_initializer(
-				src_page->uninit.type,
-				src_page->va,
-				src_page->writable,
-				src_page->uninit.init,
-				src_page->uninit.aux
-			);
-		}else{
-			if(vm_alloc_page(type, src_page->va, src_page->writable) && vm_claim_page(src_page->va)){
-				dst_page = spt_find_page(dst, src_page->va);
-				memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
-			}
+			void *aux = src_page->uninit.aux;
+			vm_alloc_page_with_initializer(page_get_type(src_page), upage, writable, src_page->uninit.init, aux);
+		}
+		else if(type == VM_FILE)
+		{
+			struct load_info *li = malloc(sizeof(struct load_info));
+			li->file = src_page->file.file;
+			li->offset = src_page->file.offset;
+			li->read_bytes = src_page->file.read_bytes;
+
+			// init은 file_backed_initializer에서 수행
+			if(!vm_alloc_page_with_initializer(type, upage, writable, NULL, li));
+
+			dst_page = spt_find_page(dst, upage);
+			file_backed_initializer(dst_page, type, NULL);
+			dst_page->frame = src_page->frame;
+			pml4_set_page(thread_current()->pml4, dst_page->va, src_page->frame->kva, src_page->writable);
+		}
+		else{
+			if(!vm_alloc_page(type, upage, writable))
+				return false;
+			if(!vm_claim_page(upage))
+				return false;
+			dst_page = spt_find_page(dst, upage);
+			memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
 		}
 	}
 	return true;

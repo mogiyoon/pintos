@@ -103,6 +103,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_CLOSE :
 			close(f->R.rdi);
 			break;
+#ifdef VM
+		case SYS_MMAP :
+			f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+			break;
+		case SYS_MUNMAP :
+			munmap(f->R.rdi);
+			break;
+#endif
 		default :
 			exit(-1);
 	}
@@ -148,7 +156,6 @@ void exit (int status){
 	thread_exit();
 }
 
-/* Dummy Code */
 pid_t fork (const char *thread_name){
 	check_address(thread_name);
 	return process_fork(thread_name, NULL);
@@ -178,27 +185,44 @@ int wait (pid_t pid){
 
 bool create (const char *file, unsigned initial_size){
 	check_address(file);
-	return filesys_create(file, initial_size);
+
+	lock_acquire(&filesys_lock);
+	bool success = filesys_create(file, initial_size);
+	lock_release(&filesys_lock);
+
+	return success;
 }
 
 bool remove (const char *file){
 	check_address(file);
-	return filesys_remove(file);
+
+	lock_acquire(&filesys_lock);
+	bool success = filesys_remove(file);
+	lock_release(&filesys_lock);
+
+	return success;
 }
 
 int open (const char *file){
 	check_address(file);
 
+	lock_acquire(&filesys_lock);
+
 	struct file *f = filesys_open(file);
 	if (f == NULL)
-		return -1;
+		// return -1;
+		goto err;
 	
 	int fd = get_next_fd(f);	// 함수 구현
 
 	if (fd == -1)
 		file_close(f);
 	
+	lock_release(&filesys_lock);
 	return fd;
+err:
+	lock_release(&filesys_lock);
+	return -1;
 }
 
 int filesize (int fd){
@@ -304,3 +328,34 @@ void close (int fd){
 
 	file_close(file);
 }
+
+/* Project 3 : Memory Mapped Files */
+#ifdef VM
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset){
+	// printf("[mmap-debug] Called mmap: addr=%p, length=%zu, writable=%d, fd=%d, offset=%d\n", addr, length, writable, fd, offset);
+	// 1. addr이 NULL이거나 커널 주소이거나 페이지 정렬이 아닌 경우
+	if (!addr || pg_round_down(addr) != addr || is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
+		return NULL;
+	// 2. offset이 페이지 정렬이 아닌 경우
+	if(offset % PGSIZE != 0)
+		return NULL;
+	// 3. addr 범위 내에 이미 매핑된 페이지가 있는 경우
+	if(spt_find_page(&thread_current()->spt, addr))
+		return NULL;
+	
+	struct file *file = process_get_file(fd);
+
+	// 4. file이 NULL이거나 매핑 길이가 0 이하인 경우
+	if(file == NULL || fd <= 2)
+		return NULL;
+	// 5. 파일 길이가 0이거나 매핑 길이가 0 이하일 경우
+	if(file_length(file) == 0 || (long)length <= 0)
+		return NULL;
+	
+	// printf("[mmap-debug] mmap proceeding with do_mmap\n");
+	return do_mmap(addr, length, writable, file, offset);
+}
+void munmap (void *addr){
+	do_munmap(addr);
+}
+#endif

@@ -771,7 +771,7 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
+bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
@@ -784,13 +784,19 @@ lazy_load_segment (struct page *page, void *aux) {
 	off_t offset = li->offset;
 	size_t page_read_bytes = li->read_bytes;
 	size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+	// printf("[lazy_load] Start loading page at VA=%p (offset=%ld, read=%zu, zero=%zu)\n", page->va, offset, page_read_bytes, page_zero_bytes);
 	
 	file_seek(file, offset);
-	if(file_read(file, page->frame->kva, page_read_bytes) != (off_t)page_read_bytes){
+	off_t bytes_read = file_read(file, page->frame->kva, page_read_bytes);
+	if(bytes_read != (off_t)page_read_bytes){
+		// printf("[lazy_load] file_read failed: expected %zu, got %ld\n", page_read_bytes, bytes_read);
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
 	memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+
+	// printf("[lazy_load] Successfully loaded VA=%p to PA=%p\n", page->va, page->frame->kva);
 	return true;
 }
 

@@ -7,7 +7,7 @@ void syscall_init (void);
 typedef int pid_t;
 #define PID_ERROR ((pid_t)-1)
 
-struct lock filesys_lock;
+extern struct lock filesys_lock;
 
 void halt (void);
 void exit (int status);
@@ -27,11 +27,13 @@ void close (int fd);
 #ifndef VM
 void check_address (void *addr);
 #else
-/* Project 3 : VM - anon page */
+/* Project 3 : VM */
 struct page *check_address(void *addr);
 #endif
 
 #include "include/filesys/off_t.h";
 #include "stddef.h";
 void check_valid_buffer(void *buffer, size_t size, bool writable);
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap (void *addr);
 #endif /* userprog/syscall.h */

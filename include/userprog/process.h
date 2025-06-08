@@ -37,4 +37,7 @@ struct file *process_get_file(int fd);
 int process_close_file(int fd);
 struct thread *get_child_process(tid_t tid);
 
+/* Project 3 : Memory Mapped Files */
+bool lazy_load_segment (struct page *page, void *aux);
+
 #endif /* userprog/process.h */

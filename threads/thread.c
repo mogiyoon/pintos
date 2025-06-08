@@ -675,6 +675,9 @@ donate_priority (void){
 		if(!curr->wait_lock)
 			break;
 		struct thread *holder = curr->wait_lock->holder;
+		/* Project 3 : Memory Mapped Files*/
+		if(holder == NULL)
+			break;
 		if(holder->priority < priority){
 			holder->priority = priority;
 		}
