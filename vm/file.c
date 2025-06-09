@@ -49,13 +49,14 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
-	// file_write_at(page->mmaped_file, page->frame->kva, page->file.read_bytes, page->file.ofs);
+	if ((page->mmaped_file != NULL) && !(page->mmaped_file->deny_write)) {
+		file_write_at(page->mmaped_file, page->frame->kva, page->file.read_bytes, page->file.ofs);
+	}
 
 	free(page->frame);	
-	// if (page->mmaped_file != NULL) {
-		// printf("mmaped file: %d", page->mmaped_file->inode);
-		// file_close(page->mmaped_file);
-	// }
+	if (page->mmaped_file != NULL) {
+		file_close(page->mmaped_file);
+	}
 }
 
 static bool
@@ -105,7 +106,7 @@ do_mmap (void *addr, size_t length, int writable,
 	off_t ofs = offset;
 	uint8_t* upage = addr;
 	
-	struct list* mmap_pages_list = malloc(sizeof(struct list));
+	struct list* mmap_pages_list = calloc(1, sizeof(struct list));
 	if (mmap_pages_list == NULL) {
 		return NULL;
 	}

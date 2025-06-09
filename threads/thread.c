@@ -343,7 +343,6 @@ void
 thread_exit (void) {
 	ASSERT (!intr_context ());
 	struct thread* cur = thread_current();
-	enum intr_level old_level = intr_disable ();
 	cur->self_status->thread = NULL;
 	sema_up(&cur->self_status->wait_sema);
 #ifdef USERPROG
@@ -351,8 +350,8 @@ thread_exit (void) {
 #endif
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
+	intr_disable ();
 	do_schedule (THREAD_DYING);
-	intr_set_level(old_level);
 	msg("end");
 	NOT_REACHED ();
 }

@@ -102,7 +102,7 @@ uninit_copy_page (struct page *page, void *va, vm_initializer *init,
 		case VM_ANON:
 			break;
 		case VM_FILE:
-			new_aux = malloc(sizeof(struct file_aux_info));
+			new_aux = calloc(1, sizeof(struct file_aux_info));
 			memcpy(new_aux, aux, sizeof(struct file_aux_info));
 			aux = new_aux;
 			break;

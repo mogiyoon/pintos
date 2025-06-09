@@ -57,7 +57,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
-		struct page* new_page = malloc(sizeof(struct page));
+		struct page* new_page = calloc(1, sizeof(struct page));
 		if (new_page == NULL) {
 			goto err;
 		}
@@ -328,7 +328,7 @@ else
 struct hash_elem*
 copy_page_by_hash (struct hash_elem* src_elem) {
 	struct page* old_page = hash_entry(src_elem, struct page, hash_elem);
-	struct page* new_page = malloc(sizeof(struct page));
+	struct page* new_page = calloc(1, sizeof(struct page));
 	//TODO: determine true or false result of function
 
 	switch (old_page->operations->type)

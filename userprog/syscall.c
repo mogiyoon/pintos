@@ -28,8 +28,7 @@ enum waddr {
 	UADDR
 };
 
-struct lock syscall_oc;
-struct lock syscall_rw;
+struct lock syscall_lock;
 
 /* Process identifier. */
 typedef int pid_t;
@@ -70,7 +69,7 @@ static bool ptr_error (char* input_ptr);
 
 void
 syscall_init (void) {
-	lock_init(&syscall_rw);
+	lock_init(&syscall_lock);
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
@@ -132,14 +131,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			result = filesize((int)arg1);
 			break;
 		case SYS_READ:
-			lock_acquire(&syscall_rw);
 			result = read((int)arg1, (char*)arg2, (unsigned)arg3);
-			lock_release(&syscall_rw);
 			break;
 		case SYS_WRITE:
-			lock_acquire(&syscall_rw);
 			result = write((int)arg1, (char*)arg2, (unsigned)arg3);
-			lock_release(&syscall_rw);
 			break;
 		case SYS_SEEK:
 			seek((int)arg1, (unsigned)arg2);
@@ -290,8 +285,10 @@ int read (int fd, void *buffer, unsigned length) {
 		return -1;
 	}
 
+	lock_acquire(&syscall_lock);
 	unsigned int read_len;
 	read_len = file_read(curr->file_dt[fd], buffer, length);
+	lock_release(&syscall_lock);
 
 	return read_len;
 }
@@ -316,12 +313,14 @@ int write (int fd, const void *buffer, unsigned length) {
 		return -1;
 	}
 
-	if (inode_get_deny(file_get_inode(curr->file_dt[fd]))) {
+	if (curr->file_dt[fd]->deny_write) {
 		return 0;	
 	}
 
+	lock_acquire(&syscall_lock);
 	unsigned int write_len;
 	write_len = file_write(curr->file_dt[fd], buffer, length);
+	lock_release(&syscall_lock);
 	return write_len;
 }
 
@@ -372,11 +371,15 @@ void* mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 		return NULL;
 	}
 
+	//zero-len
+	if (filesize(curr->file_dt[fd]) == 0) {
+		return NULL;
+	}
+
 	return do_mmap(addr, length, writable, thread_current()->file_dt[fd], offset);
 }
 
 void munmap (void *addr) {
-
 	do_munmap(addr);
 }
 
