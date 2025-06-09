@@ -1,6 +1,7 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
+#include <hash.h>
 #include "threads/palloc.h"
 
 enum vm_type {
@@ -44,6 +45,8 @@ struct page {
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
+	struct hash_elem spt_elem; // 해시 테이블에 이 page를 연결 하기 위한 요소
+	bool writable;
 
 	/* Your implementation */
 
@@ -59,10 +62,13 @@ struct page {
 	};
 };
 
+
+
 /* The representation of "frame" */
 struct frame {
 	void *kva;
 	struct page *page;
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
@@ -85,6 +91,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+	struct hash spt_hash; // 해시 테이블에 저장
 };
 
 #include "threads/thread.h"
@@ -108,5 +115,6 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
 void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
+void hash_page_destroy(struct hash_elem *e, void *aux);
 
 #endif  /* VM_VM_H */

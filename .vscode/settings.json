@@ -5,6 +5,11 @@
         "timer.h": "c",
         "stdint.h": "c",
         "synch.h": "c",
-        "process.h": "c"
+        "process.h": "c",
+        "vm.h": "c",
+        "stdbool.h": "c",
+        "palloc.h": "c",
+        "hash.h": "c",
+        "page_cache.h": "c"
     }
 }

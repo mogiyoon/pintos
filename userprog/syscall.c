@@ -201,7 +201,7 @@ int filesize (int fd){
 }
 
 int read(int fd, void *buffer, unsigned size){
-    check_address(buffer);
+    //check_address(buffer);
     struct thread *curr = thread_current();
     struct file *readed_file = curr-> fdt[fd];
     int bytes = 0;
@@ -216,10 +216,8 @@ int read(int fd, void *buffer, unsigned size){
         }
 		
     } 
-	else if(fd == 1){
-		exit(-1);
-	}
-    else if(fd >=2){
+	
+    else if(fd >=3){
     bytes = file_read (readed_file, buffer, size);
     }
 
