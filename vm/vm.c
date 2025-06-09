@@ -8,6 +8,8 @@
 #include "intrinsic.h"
 
 struct list frame_table;
+struct lock frame_lock;
+static struct list_elem *clock_ptr = NULL;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -22,6 +24,7 @@ vm_init (void) {
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
 	list_init(&frame_table);
+	lock_init(&frame_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -121,9 +124,45 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
-	struct frame *victim = NULL;
-	 /* TODO: The policy for eviction is up to you. */
+	// TODO: The policy for eviction is up to you.
+	ASSERT(!list_empty(&frame_table));
+	lock_acquire(&frame_lock);
+	
+	// list를 한 바퀴 돌고도 victim을 못찾은 경우, 강제로 선정하기 위한 포인터
+	struct list_elem *start = clock_ptr;
 
+	if (clock_ptr == NULL || clock_ptr == list_end(&frame_table))
+		clock_ptr = list_begin(&frame_table);
+
+	start = clock_ptr;
+
+	struct frame *victim = NULL;
+	
+	while(1){
+		victim = list_entry(clock_ptr, struct frame, frame_elem);
+		struct page *page = victim->page;
+
+		if(page != NULL && !pml4_is_accessed(thread_current()->pml4, page->va)){
+			break;
+		}
+		if(page != NULL)
+			pml4_set_accessed(thread_current()->pml4, page->va, false);
+
+		clock_ptr = list_next(clock_ptr);
+		if(clock_ptr == list_end(&frame_table))
+			clock_ptr = list_begin(&frame_table);
+
+		// 찾을 수 없는 경우, 강제로 start를 victim으로 선정.
+		// 최대 한 바퀴만 루프를 돌게 하여 데드락 가능성 차단. swap-anon에서 무한루프 해결
+		if(clock_ptr == start)
+			break;
+	}
+
+	clock_ptr = list_next(clock_ptr);
+	if(clock_ptr == list_end(&frame_table))
+		clock_ptr = list_begin(&frame_table);
+	
+	lock_release(&frame_lock);
 	return victim;
 }
 
@@ -131,10 +170,16 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+	struct frame *victim = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	ASSERT(victim != NULL);
+	ASSERT(victim->page != NULL);
 
-	return NULL;
+	if(!swap_out(victim->page))
+		PANIC("vm_evict : swap out failed");
+	victim->page = NULL;
+
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -144,18 +189,20 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	/* TODO: Fill this function. */
+	
 	struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
 	ASSERT(frame != NULL);
 
 	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
 
-	if(frame->kva == NULL)
+	if(frame->kva == NULL){
 		frame = vm_evict_frame();
-	else
+	}else{
 		list_push_back(&frame_table, &frame->frame_elem);
-
+	}
 	frame->page = NULL;
 	ASSERT(frame->page == NULL);
+
 	return frame;
 }
 
