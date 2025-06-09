@@ -505,7 +505,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", token_list[0]);
 		sema_up(&thread_current()->self_status->load_sema);
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	/* Read and verify executable header. */

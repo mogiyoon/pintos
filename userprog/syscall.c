@@ -28,29 +28,27 @@ enum waddr {
 	UADDR
 };
 
-struct lock syscall_lock;
-
 /* Process identifier. */
 typedef int pid_t;
 #define PID_ERROR ((pid_t) -1)
 
-void halt (void) NO_RETURN;
-void exit (int status) NO_RETURN;
-pid_t fork (const struct intr_frame* thread_frame);
-int exec (const char *file);
-int wait (pid_t child_pid);
-bool create (const char *file, unsigned initial_size);
-bool remove (const char *file);
-int open (const char *file);
-int filesize (int fd);
-int read (int fd, void *buffer, unsigned length);
-int write (int fd, const void *buffer, unsigned length);
-void seek (int fd, unsigned position);
-unsigned tell (int fd);
-void close (int fd);
+void sys_halt (void) NO_RETURN;
+void sys_exit (int status) NO_RETURN;
+pid_t sys_fork (const struct intr_frame* thread_frame);
+int sys_exec (const char *file);
+int sys_wait (pid_t child_pid);
+bool sys_create (const char *file, unsigned initial_size);
+bool sys_remove (const char *file);
+int sys_open (const char *file);
+int sys_filesize (int fd);
+int sys_read (int fd, void *buffer, unsigned length);
+int sys_write (int fd, const void *buffer, unsigned length);
+void sys_seek (int fd, unsigned position);
+unsigned sys_tell (int fd);
+void sys_close (int fd);
 
-void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
-void munmap (void *addr);
+void *sys_mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void sys_munmap (void *addr);
 
 static bool ptr_error (char* input_ptr);
 
@@ -81,7 +79,7 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-char* call_name[] = {"halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "create\0", "remove\0", "open\0", "file size\0", "read\0", "write\0", "seek\0", "tell\0", "close\0", "mmap\0", "munmap\0"};
+char* call_name[] = {"sys_halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "create\0", "remove\0", "open\0", "file size\0", "read\0", "write\0", "seek\0", "sys_tell\0", "close\0", "mmap\0", "munmap\0"};
 
 /* The main system call interface */
 void
@@ -104,52 +102,52 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	switch (arg0)
 	{
 		case SYS_HALT:
-			halt();
+			sys_halt();
 			break;
 		case SYS_EXIT:
-			exit((int)arg1);
+			sys_exit((int)arg1);
 			break;
 		case SYS_FORK:
-			result = fork(f);
+			result = sys_fork(f);
 			break;
 		case SYS_EXEC:
-			result = exec((char*)arg1);
+			result = sys_exec((char*)arg1);
 			break;
 		case SYS_WAIT:
-			result = wait((pid_t)arg1);
+			result = sys_wait((pid_t)arg1);
 			break;
 		case SYS_CREATE:
-			result = create((char*)arg1, (unsigned)arg2);
+			result = sys_create((char*)arg1, (unsigned)arg2);
 			break;
 		case SYS_REMOVE:
-			result = remove((char*)arg1);
+			result = sys_remove((char*)arg1);
 			break;
 		case SYS_OPEN:
-			result = open((char*)arg1);
+			result = sys_open((char*)arg1);
 			break;
 		case SYS_FILESIZE:
-			result = filesize((int)arg1);
+			result = sys_filesize((int)arg1);
 			break;
 		case SYS_READ:
-			result = read((int)arg1, (char*)arg2, (unsigned)arg3);
+			result = sys_read((int)arg1, (char*)arg2, (unsigned)arg3);
 			break;
 		case SYS_WRITE:
-			result = write((int)arg1, (char*)arg2, (unsigned)arg3);
+			result = sys_write((int)arg1, (char*)arg2, (unsigned)arg3);
 			break;
 		case SYS_SEEK:
-			seek((int)arg1, (unsigned)arg2);
+			sys_seek((int)arg1, (unsigned)arg2);
 			break;
 		case SYS_TELL:
-			result = tell((int)arg1);
+			result = sys_tell((int)arg1);
 			break;
 		case SYS_CLOSE:
-			close((int)arg1);
+			sys_close((int)arg1);
 			break;
 		case SYS_MMAP:
-			result = mmap((void*)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
+			result = sys_mmap((void*)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
 			break;
 		case SYS_MUNMAP:
-			munmap((void*)arg1);
+			sys_munmap((void*)arg1);
 			break;
 		
 		default:
@@ -159,11 +157,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	f->R.rax = result;
 }
 
-void halt (void) {
+void sys_halt (void) {
 	power_off();
 }
 
-void exit (int status) {
+void sys_exit (int status) {
 	struct thread *curr = thread_current();
 	if (curr != NULL) {
 		curr->self_status->exit_status = status;
@@ -172,35 +170,35 @@ void exit (int status) {
 	}
 }
 
-pid_t fork (const struct intr_frame* thread_frame) {
+pid_t sys_fork (const struct intr_frame* thread_frame) {
 	char* thread_name = thread_frame->R.rdi;
 	return process_fork(thread_name, thread_frame);
 }
 
-int exec (const char *file) {
+int sys_exec (const char *file) {
 	if (ptr_error(file)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	char* fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL) {
-		exit(-1);
+		sys_exit(-1);
 	}
 	strlcpy (fn_copy, file, PGSIZE);
 
 	process_exec(fn_copy);
 }
 
-int wait (pid_t child_pid) {
+int sys_wait (pid_t child_pid) {
 	return process_wait(child_pid);
 }
 
-bool create (const char *file, unsigned initial_size) {
+bool sys_create (const char *file, unsigned initial_size) {
 	if (ptr_error(file)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 	if (strlen(file) == 0) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	struct file* tmp_file = filesys_open(file);
@@ -216,18 +214,18 @@ bool create (const char *file, unsigned initial_size) {
 	}
 }
 
-bool remove (const char *file) {
+bool sys_remove (const char *file) {
 	if (ptr_error(file)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	bool result = filesys_remove(file);
 	return result;
 }
 
-int open (const char *file) {
+int sys_open (const char *file) {
 	if (ptr_error(file)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 	
 	struct file* new_file = filesys_open(file);
@@ -254,7 +252,7 @@ int open (const char *file) {
 	return -1;
 }
 
-int filesize (int fd) {
+int sys_filesize (int fd) {
 	struct thread* curr = thread_current();
 	if (fd >= FD_MAX || fd < 0 || curr->file_dt[fd] == NULL) {
 		return -1;
@@ -263,14 +261,14 @@ int filesize (int fd) {
 	return file_length(curr->file_dt[fd]);
 }
 
-int read (int fd, void *buffer, unsigned length) {
+int sys_read (int fd, void *buffer, unsigned length) {
 	if (ptr_error(buffer)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	struct page* get_page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
 	if (get_page != NULL && !(get_page->writable)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	if (fd == 0) {
@@ -293,9 +291,9 @@ int read (int fd, void *buffer, unsigned length) {
 	return read_len;
 }
 
-int write (int fd, const void *buffer, unsigned length) {
+int sys_write (int fd, const void *buffer, unsigned length) {
 	if (ptr_error(buffer)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	// struct page* get_page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
@@ -324,27 +322,27 @@ int write (int fd, const void *buffer, unsigned length) {
 	return write_len;
 }
 
-void seek (int fd, unsigned position) {
+void sys_seek (int fd, unsigned position) {
 	struct file* tmp_file = thread_current()->file_dt[fd];
 	if (tmp_file == NULL) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	file_seek(tmp_file, position);
 }
 
-unsigned tell (int fd) {
+unsigned sys_tell (int fd) {
 	struct file* tmp_file = thread_current()->file_dt[fd];
 	if (ptr_error(tmp_file)) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	return file_tell(tmp_file);
 }
 
-void close (int fd) {
+void sys_close (int fd) {
 	if (fd >= FD_MAX) {
-		exit(-1);
+		sys_exit(-1);
 	}
 
 	struct file* tmp_file = thread_current()->file_dt[fd];
@@ -360,7 +358,11 @@ void close (int fd) {
 	}
 }
 
-void* mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+void* sys_mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	if (ptr_error(addr) || ptr_error(addr + length)) {
+		return NULL;
+	}
+
 	struct thread* curr = thread_current();
 	if (fd >= FD_MAX || fd < 2 || curr->file_dt[fd] == NULL) {
 		return NULL;
@@ -372,14 +374,14 @@ void* mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 	}
 
 	//zero-len
-	if (filesize(curr->file_dt[fd]) == 0) {
+	if (length == 0 || length < (uint64_t)offset) {
 		return NULL;
 	}
 
 	return do_mmap(addr, length, writable, thread_current()->file_dt[fd], offset);
 }
 
-void munmap (void *addr) {
+void sys_munmap (void *addr) {
 	do_munmap(addr);
 }
 

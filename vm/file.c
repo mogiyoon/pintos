@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <round.h>
+#include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "vm/vm.h"
@@ -49,7 +50,7 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
-	if ((page->mmaped_file != NULL) && !(page->mmaped_file->deny_write)) {
+	if ((page->mmaped_file != NULL) && !(page->mmaped_file->deny_write) && pml4_is_dirty(thread_current()->pml4, page->va)) {
 		file_write_at(page->mmaped_file, page->frame->kva, page->file.read_bytes, page->file.ofs);
 	}
 
