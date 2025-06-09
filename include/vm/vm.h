@@ -123,5 +123,5 @@ struct hash_elem* copy_page (struct hash_elem* src_elem);
 bool vm_copy_uninit_page (struct page* old_page, struct page* new_page);
 bool vm_copy_claim_page (struct page* old_page, struct page* new_page);
 
-void delete_page (struct hash_elem* e, void* aux);
+void delete_page_by_hash (struct hash_elem* e, void* aux);
 #endif  /* VM_VM_H */

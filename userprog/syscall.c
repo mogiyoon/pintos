@@ -78,7 +78,7 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-char* call_name[] = {"halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "create\0", "remove\0", "open\0", "file size\0", "read\0", "write\0", "seek\0", "tell\0", "close\0", "dup2\0", "mmap\0", "munmap\0"};
+char* call_name[] = {"halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "create\0", "remove\0", "open\0", "file size\0", "read\0", "write\0", "seek\0", "tell\0", "close\0", "mmap\0", "munmap\0"};
 
 /* The main system call interface */
 void
@@ -142,10 +142,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_CLOSE:
 			close((int)arg1);
 			break;
-		case SYS_DUP2:
-			break;
 		case SYS_MMAP:
-			mmap((void*)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
+			result = mmap((void*)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
 			break;
 		case SYS_MUNMAP:
 			munmap((void*)arg1);
@@ -295,10 +293,10 @@ int write (int fd, const void *buffer, unsigned length) {
 		exit(-1);
 	}
 
-	struct page* get_page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
-	if (get_page != NULL && !(get_page->writable)) {
-		exit(-1);
-	}
+	// struct page* get_page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
+	// if (get_page != NULL && !(get_page->writable)) {
+	// 	exit(-1);
+	// }
 
 	if (fd == 1) {
 		putbuf(buffer, length);
@@ -357,7 +355,8 @@ void close (int fd) {
 
 void* mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 
-	do_mmap(addr, length, writable, thread_current()->file_dt[fd], offset);
+	addr = pg_round_down(addr);
+	return do_mmap(addr, length, writable, thread_current()->file_dt[fd], offset);
 }
 
 void munmap (void *addr) {

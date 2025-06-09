@@ -120,18 +120,19 @@ kill (struct intr_frame *f) {
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
 page_fault (struct intr_frame *f) {
-	// printf("page fault work\n");
 	bool not_present;  /* True: not-present page, false: writing r/o page. */
 	bool write;        /* True: access was write, false: access was read. */
 	bool user;         /* True: access by user, false: access by kernel. */
 	void *fault_addr;  /* Fault address. */
-
+	
 	/* Obtain faulting address, the virtual address that was
-	   accessed to cause the fault.  It may point to code or to
-	   data.  It is not necessarily the address of the instruction
-	   that caused the fault (that's f->rip). */
-
+	accessed to cause the fault.  It may point to code or to
+	data.  It is not necessarily the address of the instruction
+	that caused the fault (that's f->rip). */
+	
 	fault_addr = (void *) rcr2();
+	// printf("page fault work\n");
+	// printf("page fault addr: %p\n", pg_round_down(fault_addr));
 
 	/* Turn interrupts back on (they were only off so that we could
 	   be assured of reading CR2 before it changed). */

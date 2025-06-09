@@ -292,7 +292,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-	hash_clear(&spt->sup_page_hash, delete_page);
+	hash_clear(&spt->sup_page_hash, delete_page_by_hash);
 }
 
 uint64_t
@@ -380,10 +380,10 @@ vm_copy_claim_page (struct page* old_page, struct page* new_page) {
 }
 
 void
-delete_page (struct hash_elem* e, void* aux) {
+delete_page_by_hash (struct hash_elem* e, void* aux) {
 	struct page* d_page = hash_entry(e, struct page, hash_elem);
 	//TODO: ADD release aux for each types
 	//TODO: use dealloc and modify each destroy function
 	free(d_page->frame);
-	free(d_page);
+	vm_dealloc_page(d_page);
 }
