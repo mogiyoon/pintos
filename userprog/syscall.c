@@ -28,6 +28,9 @@ enum waddr {
 	UADDR
 };
 
+struct lock syscall_oc;
+struct lock syscall_rw;
+
 /* Process identifier. */
 typedef int pid_t;
 #define PID_ERROR ((pid_t) -1)
@@ -67,6 +70,7 @@ static bool ptr_error (char* input_ptr);
 
 void
 syscall_init (void) {
+	lock_init(&syscall_rw);
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
@@ -128,10 +132,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			result = filesize((int)arg1);
 			break;
 		case SYS_READ:
+			lock_acquire(&syscall_rw);
 			result = read((int)arg1, (char*)arg2, (unsigned)arg3);
+			lock_release(&syscall_rw);
 			break;
 		case SYS_WRITE:
+			lock_acquire(&syscall_rw);
 			result = write((int)arg1, (char*)arg2, (unsigned)arg3);
+			lock_release(&syscall_rw);
 			break;
 		case SYS_SEEK:
 			seek((int)arg1, (unsigned)arg2);
@@ -354,8 +362,16 @@ void close (int fd) {
 }
 
 void* mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	struct thread* curr = thread_current();
+	if (fd >= FD_MAX || fd < 2 || curr->file_dt[fd] == NULL) {
+		return NULL;
+	}
 
-	addr = pg_round_down(addr);
+	//mis-align
+	if ((uint64_t)addr % PGSIZE != 0) {
+		return NULL;
+	}
+
 	return do_mmap(addr, length, writable, thread_current()->file_dt[fd], offset);
 }
 

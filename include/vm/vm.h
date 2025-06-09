@@ -46,11 +46,15 @@ struct page {
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
-	enum vm_type now_type;
 
 	/* Your implementation */
 	bool writable;
 	struct thread* owner;
+	
+	/* For mmaped page */
+	struct file* mmaped_file;
+	struct list* mmaped_list;
+	struct list_elem mmaped_elem; 
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -119,7 +123,7 @@ enum vm_type page_get_type (struct page *page);
 uint64_t va_to_hashvalue(struct hash_elem *e, void* aux);
 bool hash_value_comparer(struct hash_elem* a, struct hash_elem* b, void *aux);
 
-struct hash_elem* copy_page (struct hash_elem* src_elem);
+struct hash_elem* copy_page_by_hash (struct hash_elem* src_elem);
 bool vm_copy_uninit_page (struct page* old_page, struct page* new_page);
 bool vm_copy_claim_page (struct page* old_page, struct page* new_page);
 

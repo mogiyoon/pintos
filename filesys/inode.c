@@ -8,6 +8,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
  
+struct lock inode_lock;
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -39,7 +40,8 @@ static struct list open_inodes;
 /* Initializes the inode module. */
 void
 inode_init (void) {
-	list_init (&open_inodes);
+	lock_init(&inode_lock);
+	list_init(&open_inodes);
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -168,6 +170,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	uint8_t *buffer = buffer_;
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
+
+	lock_acquire(&inode_lock);
 	
 	while (size > 0) {
 		/* Disk sector to read, starting byte offset within sector. */
@@ -209,6 +213,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	free (bounce);
 	// printf("bytes read: %d\n", bytes_read);
 
+	lock_release(&inode_lock);
 	return bytes_read;
 }
 
@@ -220,12 +225,15 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 off_t
 inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		off_t offset) {
+	lock_acquire(&inode_lock);
 	const uint8_t *buffer = buffer_;
 	off_t bytes_written = 0;
 	uint8_t *bounce = NULL;
 
-	if (inode->deny_write_cnt)
+	if (inode->deny_write_cnt) {
+		lock_release(&inode_lock);
 		return 0;
+	}
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
@@ -269,6 +277,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		bytes_written += chunk_size;
 	}
 	free (bounce);
+	lock_release(&inode_lock);
 	return bytes_written;
 }
 
@@ -293,7 +302,6 @@ inode_allow_write (struct inode *inode) {
 	ASSERT (inode->deny_write_cnt > 0);
 	ASSERT (inode->deny_write_cnt <= inode->open_cnt);
 	inode->deny_write_cnt--;
-	// printf("allow inode: %d\n",inode_get_deny(inode));
 	// lock_release(&inode->inode_lock);
 }
 

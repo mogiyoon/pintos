@@ -14,6 +14,9 @@ struct file_aux_info {
 };
 
 struct file_page {
+	off_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
 };
 
 void vm_file_init (void);

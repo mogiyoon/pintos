@@ -74,17 +74,17 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			break;
 		
 		default:
+			vm_dealloc_page(new_page);
 			goto err;
 		}
 		uninit_new(new_page, upage, init, type, aux, init_func);
 		new_page->writable = writable;
-		new_page->owner = thread_current();
 		// printf("vm alloc page va: %p\n", upage);
 		// printf("vm alloc page writable: %d\n", writable);
 
 		/* TODO: Insert the page into the spt. */
 		if (!spt_insert_page(spt, new_page)) {
-			//TODO: Release page
+			vm_dealloc_page(new_page);
 			goto err;
 		}
 
@@ -99,6 +99,7 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page tmp_page;
 	/* TODO: Fill this function. */
+	va = pg_round_down(va);
 	tmp_page.va = va;
 	struct hash_elem* tmp_hash = hash_find(&spt->sup_page_hash, &tmp_page.hash_elem);
 	if (tmp_hash != NULL) {
@@ -126,8 +127,8 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	hash_delete(&spt->sup_page_hash, &page->hash_elem);
 	vm_dealloc_page (page);
-	return true;
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -238,6 +239,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
  * DO NOT MODIFY THIS FUNCTION. */
 void
 vm_dealloc_page (struct page *page) {
+	// printf("called dealloc\n");
 	destroy (page);
 	free (page);
 }
@@ -255,6 +257,9 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
+	if (frame == NULL) {
+		return false;
+	}
 
 	/* Set links */
 	frame->page = page;
@@ -266,9 +271,11 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	uint64_t* cur_pml4 = thread_current()->pml4;
 	if (pml4_get_page(cur_pml4, page->va) != NULL) {
+		free(frame);
 		return false;
 	} else {
 		if (!pml4_set_page(cur_pml4, page->va, frame->kva, page->writable)) {
+			free(frame);
 			return false; 
 		}
 	}
@@ -286,7 +293,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
-		return hash_copy(&dst->sup_page_hash, &src->sup_page_hash, copy_page);
+		return hash_copy(&dst->sup_page_hash, &src->sup_page_hash, copy_page_by_hash);
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -319,15 +326,15 @@ else
 }
 
 struct hash_elem*
-copy_page (struct hash_elem* src_elem) {
+copy_page_by_hash (struct hash_elem* src_elem) {
 	struct page* old_page = hash_entry(src_elem, struct page, hash_elem);
 	struct page* new_page = malloc(sizeof(struct page));
 	//TODO: determine true or false result of function
 
-	switch (old_page->now_type)
+	switch (old_page->operations->type)
 	{
 		case VM_UNINIT:
-			vm_copy_uninit_page (old_page, new_page);
+			vm_copy_uninit_page(old_page, new_page);
 			break;
 		case VM_ANON:
 			vm_copy_claim_page(old_page, new_page);
@@ -347,7 +354,6 @@ vm_copy_uninit_page (struct page* old_page, struct page* new_page) {
 	bool succ = false;
 	succ = uninit_copy_page(new_page, old_page->va, old_page->uninit.init, old_page->uninit.type, old_page->uninit.aux, old_page->uninit.page_initializer);
 	new_page->writable = old_page->writable;
-	new_page->owner = thread_current();
 	return succ;
 }
 
@@ -355,12 +361,14 @@ bool
 vm_copy_claim_page (struct page* old_page, struct page* new_page) {
 	new_page->operations = old_page->operations;
 	new_page->va = old_page->va;
-	new_page->now_type = old_page->now_type;
 	new_page->writable = old_page->writable;
 	new_page->owner = thread_current();
 
 	//to obtain kva
 	struct frame *frame = vm_get_frame ();
+	if (frame == NULL) {
+		free(frame);
+	}
 
 	/* Set links */
 	frame->page = new_page;
@@ -369,9 +377,12 @@ vm_copy_claim_page (struct page* old_page, struct page* new_page) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	uint64_t* cur_pml4 = thread_current()->pml4;
 	if (pml4_get_page(cur_pml4, new_page->va) != NULL) {
+		free(frame);
 		return false;
 	} else {
 		if (!pml4_set_page(cur_pml4, new_page->va, frame->kva, new_page->writable)) {
+			free(frame);
+			palloc_free_page(new_page->va);
 			return false; 
 		}
 	}
@@ -381,9 +392,12 @@ vm_copy_claim_page (struct page* old_page, struct page* new_page) {
 
 void
 delete_page_by_hash (struct hash_elem* e, void* aux) {
+	// printf("delete hash work\n");
 	struct page* d_page = hash_entry(e, struct page, hash_elem);
-	//TODO: ADD release aux for each types
-	//TODO: use dealloc and modify each destroy function
-	free(d_page->frame);
+	// printf("d_page: %p\n", d_page);
+	// printf("d_page va: %p\n", d_page->va);
+
 	vm_dealloc_page(d_page);
+	//TODO: ADD release aux for each typess in destroy function
+	//TODO: use dealloc and modify each destroy function
 }
