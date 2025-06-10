@@ -396,3 +396,4 @@ static bool ptr_error (char* input_ptr) {
 
 	return false;
 }
+

@@ -7,6 +7,16 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+enum evicting_policies {
+	FIFO,
+	LRU,
+	LFU,
+	MFU,
+	NUR
+};
+
+#define evicting_policy FIFO
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -137,6 +147,28 @@ vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
 
+	switch (evicting_policy)
+	{
+	case FIFO:
+		/* code */
+		break;
+	case LRU:
+		/* code */
+		break;
+	case LFU:
+		/* code */
+		break;
+	case MFU:
+		/* code */
+		break;
+	case NUR:
+		/* code */
+		break;
+	
+	default:
+		break;
+	}
+
 	return victim;
 }
 
@@ -146,8 +178,11 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	swap_out(victim->page);
+	victim->page->frame = NULL;
+	victim->page = NULL;
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -156,14 +191,21 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
+	struct frame *result_frame;
 	struct frame *frame = calloc(1, sizeof(struct frame));
+	struct frame *evicted_frame;
 	/* TODO: Fill this function. */
 	frame->kva = palloc_get_multiple(PAL_ZERO, 1);
 	frame->page = NULL;
-	if (frame == NULL || frame->kva == NULL) {
-		PANIC("TODO");
-		// ADD evict func
-		//frame NULL과 kva NULL 분리하기
+	if (frame == NULL) {
+		return NULL;
+	}
+	if (frame->kva == NULL) {
+		free (frame);
+		evicted_frame = vm_evict_frame();
+		if (evicted_frame == NULL) {
+			return NULL;
+		}
 	}
 
 	ASSERT (frame != NULL);

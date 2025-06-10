@@ -56,6 +56,9 @@ struct page {
 	struct list* mmaped_list;
 	struct list_elem mmaped_elem; 
 
+	/* Now using */
+	bool pinned;
+
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {

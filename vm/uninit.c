@@ -112,19 +112,5 @@ uninit_copy_page (struct page *page, void *va, vm_initializer *init,
 	}
 
 	uninit_new(page, va, init, type, aux, initializer);
-	// *page = (struct page) {
-	// 	.operations = &uninit_ops,
-	// 	.va = va,
-	// 	.frame = NULL, /* no frame for now */
-	// 	.owner = thread_current(),
-	// 	.mmaped_file = NULL,
-	// 	.mmaped_list = NULL,
-	// 	.uninit = (struct uninit_page) {
-	// 		.init = init,
-	// 		.type = type,
-	// 		.aux = aux,
-	// 		.page_initializer = initializer,
-	// 	}
-	// };
 	return true;
 }
