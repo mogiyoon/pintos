@@ -7,17 +7,13 @@ struct page;
 enum vm_type;
 
 struct anon_page {
-  struct disk* anon_swap_disk;
-};
-
-struct swap_tag {
-  void* kva;
-  struct page* swap_anon_page;
-  struct hash_elem swap_hash_elem;
+  bool is_swap_out;
   disk_sector_t swap_sector;
 };
 
 void vm_anon_init (void);
 bool anon_initializer (struct page *page, enum vm_type type, void *kva);
+int sector_to_page (disk_sector_t input_sector);
+disk_sector_t page_to_sector (int page_num);
 
 #endif

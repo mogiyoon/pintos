@@ -51,6 +51,10 @@ void *sys_mmap (void *addr, size_t length, int writable, int fd, off_t offset);
 void sys_munmap (void *addr);
 
 static bool ptr_error (char* input_ptr);
+static bool pinning_spt (struct supplemental_page_table* spt);
+static bool unpinning_spt (struct supplemental_page_table* spt);
+static bool pinning_page (struct hash_elem* page_elem, void* aux);
+static bool unpinning_page (struct hash_elem* page_elem, void* aux);
 
 /* System call.
  *
@@ -84,6 +88,7 @@ char* call_name[] = {"sys_halt\0", "exit\0", "fork\0", "exec\0", "wait\0", "crea
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
+	struct thread* curr = thread_current();
 	uint64_t arg0 = f->R.rax;
 	uint64_t arg1 = f->R.rdi;
 	uint64_t arg2 = f->R.rsi;
@@ -91,7 +96,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t arg4 = f->R.r10;
 	uint64_t arg5 = f->R.r8;
 	uint64_t arg6 = f->R.r9;
-	thread_current()->user_rsp = f->rsp;
+	curr->user_rsp = f->rsp;
 
 	uint64_t result = 0;
 	// printf("\nsys call = %s\n", call_name[arg0]);
@@ -108,46 +113,74 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			sys_exit((int)arg1);
 			break;
 		case SYS_FORK:
+			// pinning_spt(&curr->spt);
 			result = sys_fork(f);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_EXEC:
+			// pinning_spt(&curr->spt);
 			result = sys_exec((char*)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_WAIT:
+			// pinning_spt(&curr->spt);
 			result = sys_wait((pid_t)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_CREATE:
+			// pinning_spt(&curr->spt);
 			result = sys_create((char*)arg1, (unsigned)arg2);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_REMOVE:
+			// pinning_spt(&curr->spt);
 			result = sys_remove((char*)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_OPEN:
+			// pinning_spt(&curr->spt);
 			result = sys_open((char*)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_FILESIZE:
+			// pinning_spt(&curr->spt);
 			result = sys_filesize((int)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_READ:
+			// pinning_spt(&curr->spt);
 			result = sys_read((int)arg1, (char*)arg2, (unsigned)arg3);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_WRITE:
+			// pinning_spt(&curr->spt);
 			result = sys_write((int)arg1, (char*)arg2, (unsigned)arg3);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_SEEK:
+			// pinning_spt(&curr->spt);
 			sys_seek((int)arg1, (unsigned)arg2);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_TELL:
+			// pinning_spt(&curr->spt);
 			result = sys_tell((int)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_CLOSE:
+			// pinning_spt(&curr->spt);
 			sys_close((int)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_MMAP:
+			// pinning_spt(&curr->spt);
 			result = sys_mmap((void*)arg1, (size_t)arg2, (int)arg3, (int)arg4, (off_t)arg5);
+			// unpinning_spt(&curr->spt);
 			break;
 		case SYS_MUNMAP:
+			// pinning_spt(&curr->spt);
 			sys_munmap((void*)arg1);
+			// unpinning_spt(&curr->spt);
 			break;
 		
 		default:
@@ -359,6 +392,7 @@ void sys_close (int fd) {
 }
 
 void* sys_mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	// printf("sys mmap: %p\n", addr);
 	if (ptr_error(addr) || ptr_error(addr + length)) {
 		return NULL;
 	}
@@ -397,3 +431,32 @@ static bool ptr_error (char* input_ptr) {
 	return false;
 }
 
+static bool pinning_spt (struct supplemental_page_table* spt) {
+	return hash_do_result_action(&spt->sup_page_hash, pinning_page);
+}
+
+static bool unpinning_spt (struct supplemental_page_table* spt) {
+	return hash_do_result_action(&spt->sup_page_hash, unpinning_page);
+}
+
+static bool pinning_page (struct hash_elem* page_elem, void* aux) {
+	struct page* object_page = hash_entry(page_elem, struct page, spt_elem);
+	bool result = false;
+	if (object_page == NULL) {
+		return result;
+	}
+	object_page->pinned = true;
+	result = true;
+	return result;
+}
+
+static bool unpinning_page (struct hash_elem* page_elem, void* aux) {
+	struct page* object_page = hash_entry(page_elem, struct page, spt_elem);
+	bool result = false;
+	if (object_page == NULL) {
+		return result;
+	}
+	object_page->pinned = false;
+	result = true;
+	return result;
+}

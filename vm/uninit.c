@@ -38,6 +38,7 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 		.owner = thread_current(),
 		.mmaped_file = NULL,
 		.mmaped_list = NULL,
+		.pinned = false,
 		.uninit = (struct uninit_page) {
 			.init = init,
 			.type = type,

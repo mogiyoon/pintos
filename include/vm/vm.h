@@ -42,10 +42,13 @@ struct thread;
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
-	struct hash_elem hash_elem;
+	struct hash_elem spt_elem;
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
+	
+	/* For policy information */
+	struct list_elem in_frame_elem;
 
 	/* Your implementation */
 	bool writable;
@@ -131,4 +134,6 @@ bool vm_copy_uninit_page (struct page* old_page, struct page* new_page);
 bool vm_copy_claim_page (struct page* old_page, struct page* new_page);
 
 void delete_page_by_hash (struct hash_elem* e, void* aux);
+
+static struct frame* vm_fifo(void);
 #endif  /* VM_VM_H */

@@ -17,12 +17,15 @@ enum evicting_policies {
 
 #define evicting_policy FIFO
 
+struct list in_frame_list;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
 vm_init (void) {
 	vm_anon_init ();
 	vm_file_init ();
+	list_init(&in_frame_list);
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
 #endif
@@ -111,9 +114,9 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	/* TODO: Fill this function. */
 	va = pg_round_down(va);
 	tmp_page.va = va;
-	struct hash_elem* tmp_hash = hash_find(&spt->sup_page_hash, &tmp_page.hash_elem);
+	struct hash_elem* tmp_hash = hash_find(&spt->sup_page_hash, &tmp_page.spt_elem);
 	if (tmp_hash != NULL) {
-		return hash_entry(tmp_hash, struct page, hash_elem);
+		return hash_entry(tmp_hash, struct page, spt_elem);
 	} else {
 		return NULL;
 	}
@@ -129,7 +132,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		return succ;
 	}
 
-	if(hash_insert(&spt->sup_page_hash, &page->hash_elem) == NULL) {
+	if(hash_insert(&spt->sup_page_hash, &page->spt_elem) == NULL) {
 		succ = true;
 	}
 	return succ;
@@ -137,7 +140,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
-	hash_delete(&spt->sup_page_hash, &page->hash_elem);
+	hash_delete(&spt->sup_page_hash, &page->spt_elem);
 	vm_dealloc_page (page);
 }
 
@@ -150,7 +153,7 @@ vm_get_victim (void) {
 	switch (evicting_policy)
 	{
 	case FIFO:
-		/* code */
+		victim = vm_fifo();
 		break;
 	case LRU:
 		/* code */
@@ -178,10 +181,16 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	// printf("evict\n");
+	// printf("evict page va: %p\n", victim->page->va);
+	// printf("evict frame va: %p\n", victim->kva);
+
 	swap_out(victim->page);
+	pml4_clear_page(victim->page->owner->pml4, victim->page->va);
 	victim->page->frame = NULL;
 	victim->page = NULL;
 
+	// printf("evict is null: %d\n", victim->page);
 	return victim;
 }
 
@@ -203,6 +212,7 @@ vm_get_frame (void) {
 	if (frame->kva == NULL) {
 		free (frame);
 		evicted_frame = vm_evict_frame();
+		frame = evicted_frame;
 		if (evicted_frame == NULL) {
 			return NULL;
 		}
@@ -212,9 +222,6 @@ vm_get_frame (void) {
 	ASSERT (frame->page == NULL);
 	return frame;
 }
-
-/* Growing the stack. */
-static int stack_full = 1;
 
 static void
 vm_stack_growth (void *addr UNUSED) {
@@ -243,22 +250,23 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	rdown_addr = pg_round_down(rdown_addr);
 	uint64_t now_rsp = user ? f->rsp : thread_current()->user_rsp;
 	// printf("user: %d\n", user);
-	// printf("rsp : %p\n", now_rsp);
-	// printf("addr: %p\n", addr);
+	// printf("try fault rsp : %p\n", now_rsp);
+	// printf("try fault addr: %p\n", addr);
 	// printf("maximum: %p\n", USER_STACK - (1<<20));
 	
 	/* TODO: Validate the fault */
 	if (pml4_get_page(cur_pml4, rdown_addr) != NULL) {
+		// printf("this1\n");
 		return false;
 	}
 	
-	if ((USER_STACK >= addr) && (addr >= now_rsp - sizeof(void*)) && (addr >= USER_STACK - (1<<20)))
+	if ((USER_STACK >= addr) && (addr >= USER_STACK - (1<<20)))
 	{
-		if (stack_full < 20) {
-			// printf("growth\n");
+		if (addr >= now_rsp - sizeof(void*)) {
+			vm_stack_growth(rdown_addr);
+			// printf("try fault growth\n");
 			// printf("user stack: %p\n", USER_STACK);
 			// printf("addr: %p\n", rdown_addr);
-			vm_stack_growth(rdown_addr);
 		} else {
 			return false;
 		}
@@ -267,10 +275,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Your code goes here */
 	page = spt_find_page(spt, rdown_addr);
 	if (page == NULL) {
-		return false;
+		if (!vm_alloc_page_with_initializer(VM_ANON, addr, true, NULL, NULL)) {
+			return false;
+		}
+		// printf("heap\n");
 	}
 
 	if (write && !(page->writable)) {
+		// printf("this3\n");
 		return false;
 	}
 
@@ -299,6 +311,8 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
+	// printf("do claim addr: %p\n", page->va);
+	// printf("do claim frame addr: %p\n", frame->kva);
 	if (frame == NULL) {
 		return false;
 	}
@@ -307,7 +321,6 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 
-	// printf("vm do addr: %p\n", page->va);
 	// printf("vm do writable: %d\n", page->writable);
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
@@ -321,6 +334,8 @@ vm_do_claim_page (struct page *page) {
 			return false; 
 		}
 	}
+
+	list_push_back(&in_frame_list, &page->in_frame_elem);
 	return swap_in (page, frame->kva);
 }
 
@@ -346,7 +361,7 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 
 uint64_t
 va_to_hashvalue(struct hash_elem *e, void* aux) {
-	struct page* tmp_page = hash_entry(e, struct page, hash_elem);
+	struct page* tmp_page = hash_entry(e, struct page, spt_elem);
 	return hash_bytes(&tmp_page->va, sizeof(void *));
 }
 
@@ -355,8 +370,8 @@ hash_value_comparer(struct hash_elem* a, struct hash_elem* b, void *aux) {
 	uint64_t pva_a; 
 	uint64_t pva_b;
 
-	struct page* tmp_a = hash_entry(a, struct page, hash_elem);
-	struct page* tmp_b = hash_entry(b, struct page, hash_elem);
+	struct page* tmp_a = hash_entry(a, struct page, spt_elem);
+	struct page* tmp_b = hash_entry(b, struct page, spt_elem);
 
 	pva_a = tmp_a->va;
 	pva_b = tmp_b->va;
@@ -369,7 +384,7 @@ else
 
 struct hash_elem*
 copy_page_by_hash (struct hash_elem* src_elem) {
-	struct page* old_page = hash_entry(src_elem, struct page, hash_elem);
+	struct page* old_page = hash_entry(src_elem, struct page, spt_elem);
 	struct page* new_page = calloc(1, sizeof(struct page));
 	//TODO: determine true or false result of function
 
@@ -388,7 +403,7 @@ copy_page_by_hash (struct hash_elem* src_elem) {
 		default:
 			break;
 	}
-	return &new_page->hash_elem;
+	return &new_page->spt_elem;
 }
 
 bool
@@ -435,11 +450,18 @@ vm_copy_claim_page (struct page* old_page, struct page* new_page) {
 void
 delete_page_by_hash (struct hash_elem* e, void* aux) {
 	// printf("delete hash work\n");
-	struct page* d_page = hash_entry(e, struct page, hash_elem);
+	struct page* d_page = hash_entry(e, struct page, spt_elem);
 	// printf("d_page: %p\n", d_page);
 	// printf("d_page va: %p\n", d_page->va);
 
 	vm_dealloc_page(d_page);
-	//TODO: ADD release aux for each typess in destroy function
+	//TODO: A release aux for each typess in destroy function
 	//TODO: use dealloc and modify each destroy function
+}
+
+static struct frame*
+vm_fifo(void) {
+	struct list_elem* victim_elem = list_pop_front(&in_frame_list);
+	struct page* victim_page = list_entry(victim_elem, struct page, in_frame_elem);
+	return victim_page->frame;
 }

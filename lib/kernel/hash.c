@@ -392,7 +392,7 @@ remove_elem (struct hash *h, struct hash_elem *e) {
 }
 
 bool
-hash_copy (struct hash* dst, struct hash* src, hash_copy_func *copy_func) {
+hash_copy (struct hash* dst, struct hash* src, hash_return_action_func *copy_func) {
 	struct hash_iterator tmp_iterator;
 	struct hash_elem* old_elem;
 	struct hash_elem* new_elem;
@@ -410,6 +410,23 @@ hash_copy (struct hash* dst, struct hash* src, hash_copy_func *copy_func) {
 		hash_insert(dst, new_elem);
 	}
 
+	return true;
+}
+
+bool
+hash_do_result_action (struct hash* src, hash_action_func_with_result *do_action) {
+	struct hash_iterator tmp_iterator;
+	struct hash_elem* tmp_elem;
+	
+	hash_first(&tmp_iterator, src);
+
+	while (hash_next (&tmp_iterator))
+	{
+		tmp_elem = tmp_iterator.elem;
+		if (!do_action(tmp_elem, NULL)){
+			return false;
+		}
+	}
 	return true;
 }
 

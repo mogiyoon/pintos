@@ -38,12 +38,25 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+	// printf("file back addr: %p\n", page->va);
+	// printf("file back swap in\n");
+
+	file_read_at (page->mmaped_file, kva, file_page->read_bytes, file_page->ofs);
+	memset (kva + file_page->read_bytes, 0, file_page->zero_bytes);
+	pml4_set_page(page->owner->pml4, page->va, kva, page->writable);
+	// printf("file swap in\n");
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	if ((page->mmaped_file != NULL) && !(page->mmaped_file->deny_write) && pml4_is_dirty(thread_current()->pml4, page->va)) {
+		file_write_at(page->mmaped_file, page->frame->kva, page->file.read_bytes, page->file.ofs);
+	}
+	// printf("file swap out\n");
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -58,6 +71,8 @@ file_backed_destroy (struct page *page) {
 	if (page->mmaped_file != NULL) {
 		file_close(page->mmaped_file);
 	}
+
+	pml4_clear_page(page->owner->pml4, page->va);
 }
 
 static bool
@@ -115,7 +130,10 @@ do_mmap (void *addr, size_t length, int writable,
 	struct page* tmp_page;
 	struct file* new_file;
 	
+	// printf("file addr: %p\n", file->inode);
+
 	while (read_bytes > 0 || zero_bytes > 0) {
+		// printf("file offset: %d\n", ofs);
 		// printf("do mmap while\n");
 
 		new_file = file_open(file->inode);
