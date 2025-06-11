@@ -38,6 +38,7 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	file_page->file = aux->file;
 	file_page->offset = aux->offset;
 	file_page->read_bytes = aux->read_bytes;
+	file_page->zero_bytes = aux->zero_bytes;
 
 	return true;
 }
@@ -46,39 +47,74 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	// read_bytes 만큼 읽어옴
+	
+	lock_acquire(&filesys_lock);
+	off_t read_bytes_at = file_read_at(file_page->file, kva, file_page->read_bytes, file_page->offset);
+	if(read_bytes_at != (off_t)file_page->read_bytes){
+		lock_release(&filesys_lock);
+		return false;
+	}
+	// 나머지는 zero_byte 만큼 채움
+	memset(kva + read_bytes_at, 0, file_page->zero_bytes);
+	// memset(page->frame->kva + read_bytes_at, 0, PGSIZE - read_bytes_at);
+
+	lock_release(&filesys_lock);
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	struct thread *curr = thread_current();
+	// 페이지가 dirty 하지 않다면 실제 파일 내용을 바꿀 필요가 없다
+	lock_acquire(&filesys_lock);
+	if(pml4_is_dirty(curr->pml4, page->va)){
+		file_write_at(file_page->file, page->frame->kva, file_page->read_bytes, file_page->offset);
+		pml4_set_dirty(curr->pml4, page->va, false);
+	}
+	// dirty비트를 초기화한다
+	// list_remove(&page->frame->frame_elem);
+	lock_release(&filesys_lock);
+	// page->frame->page = NULL;
+	// page->frame = NULL;
+	pml4_clear_page(curr->pml4, page->va);
+	// palloc_free_page(page->frame->kva);
+	// free(page->frame);
+	// page->frame = NULL;
+	// 할당된 페이지를 프리한다
+	return true; 
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
 static void
 file_backed_destroy (struct page *page) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page = &page->file;
 	struct thread *curr = thread_current();
 
-	void *kva = pml4_get_page(thread_current()->pml4, page->va);
-
+	
+	// void *kva = pml4_get_page(thread_current()->pml4, page->va);
+	// printf("[DEBUG] file_backed_destroy\n");
 	// 프레임이 존재하고 dirty한 경우 write back
-	if(kva && pml4_is_dirty(curr->pml4, page->va)){
+	if(pml4_is_dirty(curr->pml4, page->va)){
 		// printf("[DEBUG] Writing back dirty page: VA=%p\n", page->va);
 		file_write_at(file_page->file, page->va, file_page->read_bytes, file_page->offset);
 		pml4_set_dirty(curr->pml4, page->va, false);
 	}
 	// 프레임을 해제하고 메모리를 free
+	
 	if(page->frame){
 		list_remove(&page->frame->frame_elem);
 		page->frame->page = NULL;
 		// palloc_free_page(page->frame->kva);
+		
 		page->frame = NULL;
 		free(page->frame);
 	}
-
-	pml4_clear_page(curr->pml4, page->va);
 	
+	pml4_clear_page(curr->pml4, page->va);
 }
 
 /* Do the mmap */
@@ -113,6 +149,7 @@ do_mmap (void *addr, size_t length, int writable,
 		aux->file = m_file;
 		aux->offset = offset;
 		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
 
 		if(!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_segment, aux)){
 			goto err;}
@@ -127,8 +164,8 @@ do_mmap (void *addr, size_t length, int writable,
 	return original_addr;
 err:
 	// 5. 실패 시 do_munmap 호출
-	// free(aux);
-	do_munmap(original_addr);
+	free(aux);
+	// do_munmap(original_addr);
 	lock_release(&filesys_lock);
 	return NULL;
 }
@@ -141,7 +178,7 @@ do_munmap (void *addr) {
 
 	lock_acquire(&filesys_lock);
 	// addr 부터 매핑된 모든 페이지를 순차적으로 탐색하여 해제
-	while((page = spt_find_page(&curr->spt, addr)) != NULL){
+	while((page = spt_find_page(&curr->spt, addr))){
 		// destory -> file_backed_destory 호출
 		if(page){
 			destroy(page);

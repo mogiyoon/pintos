@@ -125,6 +125,7 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	// TODO: The policy for eviction is up to you.
+	
 	ASSERT(!list_empty(&frame_table));
 	lock_acquire(&frame_lock);
 	
@@ -158,9 +159,9 @@ vm_get_victim (void) {
 			break;
 	}
 
-	clock_ptr = list_next(clock_ptr);
-	if(clock_ptr == list_end(&frame_table))
-		clock_ptr = list_begin(&frame_table);
+	// clock_ptr = list_next(clock_ptr);
+	// if(clock_ptr == list_end(&frame_table))
+	// 	clock_ptr = list_begin(&frame_table);
 	
 	lock_release(&frame_lock);
 	return victim;
@@ -172,12 +173,18 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
-	ASSERT(victim != NULL);
+	// ASSERT(victim != NULL);
 	ASSERT(victim->page != NULL);
 
+	
 	if(!swap_out(victim->page))
 		PANIC("vm_evict : swap out failed");
-	victim->page = NULL;
+	
+	// if(victim->page)
+	// 	swap_out(victim->page);
+	// pml4_clear_page(thread_current()->pml4, victim->page->va);
+	// victim->page->frame = NULL;
+	// victim->page = NULL;
 
 	return victim;
 }
@@ -260,10 +267,11 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 			return true;
 		}
 		page = spt_find_page(spt, addr);
-
+		
 		// printf("FAULT addr: %p, rsp: %p, user: %d, write: %d, not_present: %d\n", addr, f->rsp, user, write, not_present);
 		if(!page || (write && !page->writable))
 			return false;
+		
 		return vm_do_claim_page(page);
 	}
 	return false;
@@ -310,7 +318,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	hash_init(spt, page_hash, page_less, NULL);
+	hash_init(&spt->spt_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -340,7 +348,8 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			li->read_bytes = src_page->file.read_bytes;
 
 			// init은 file_backed_initializer에서 수행
-			if(!vm_alloc_page_with_initializer(type, upage, writable, NULL, li));
+			if(!vm_alloc_page_with_initializer(type, upage, writable, NULL, li))
+				return false;
 
 			dst_page = spt_find_page(dst, upage);
 			file_backed_initializer(dst_page, type, NULL);

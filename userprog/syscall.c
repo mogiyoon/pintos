@@ -127,9 +127,23 @@ check_address(void *addr){
 #else
 /* Project 3 : VM - anon page */
 struct page *check_address(void *addr){
+	/*
 	if(is_kernel_vaddr(addr) || addr == NULL || !spt_find_page(&thread_current()->spt, addr))
 		exit(-1);
 	return spt_find_page(&thread_current()->spt, addr);
+	*/
+	if(addr == NULL || is_kernel_vaddr(addr)){
+		// printf("here1\n");
+		exit(-1);
+	}
+		
+	struct page *page = spt_find_page(&thread_current()->spt, addr);
+	if(page == NULL){
+		// printf("here2\n");
+		exit(-1);
+	}
+
+	return page;
 }
 
 void check_valid_buffer(void *buffer, size_t size, bool writable){
@@ -138,9 +152,13 @@ void check_valid_buffer(void *buffer, size_t size, bool writable){
 		struct page *page = check_address(buffer + i);
 
 		// if (!page) printf("page not found at %p\n", buffer + i);
+		// printf("page writable : %d, writable :%d\n", page->writable, writable);
 
-		if(!page || (writable && !(page->writable)))
+		if(!page || (writable && !(page->writable))){
+			// printf("here3\n");
 			exit(-1);
+			
+		}
 	}
 }
 #endif
@@ -270,13 +288,14 @@ int read (int fd, void *buffer, unsigned length){
 	return bytes_read;
 }
 
-int write (int fd, const void *buffer, unsigned length){
+int write (int fd, const void *buffer, unsigned length)
+{
 
 #ifdef VM
-	check_valid_buffer(buffer, length, true);
+	// check_valid_buffer(buffer, length, true);
 #endif
 	check_address(buffer);
-	
+
 	// stdin or fd < 0 인 경우 쓸게 없으니 에러 반환
 	if (fd <= 0)
 		return -1;
@@ -290,12 +309,32 @@ int write (int fd, const void *buffer, unsigned length){
 	struct file *file = process_get_file(fd);
 	if (file == NULL)
 		return -1;
+
 	off_t bytes_write = -1;
 
 	lock_acquire(&filesys_lock);
 	bytes_write = file_write(file, buffer, length);
 	lock_release(&filesys_lock);
 	return bytes_write;
+	/*
+	lock_acquire(&filesys_lock);
+	off_t bytes = -1;
+
+	struct file *file = process_get_file(fd);
+
+	if(file == STDIN || file == NULL){
+		goto done;}
+
+	if(file == STDOUT || file == STDERR){
+		putbuf(buffer, length);
+		bytes = length;
+		goto done;
+	}
+	bytes = file_write(file, buffer, length);
+done:
+	lock_release(&filesys_lock);
+	return bytes;
+	*/
 }
 
 // 파일을 읽거나 쓸 때의 위치(offset)를 지정하는 함수
